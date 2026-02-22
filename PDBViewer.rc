@@ -1,0 +1,90 @@
+// Microsoft Visual C++ generated resource script.
+//
+
+#include "Resource.h"
+
+#define APSTUDIO_READONLY_SYMBOLS
+#include "targetver.h"
+#undef APSTUDIO_READONLY_SYMBOLS
+
+#include "windows.h"
+
+#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_CHS)
+LANGUAGE LANG_CHINESE, SUBLANG_CHINESE_SIMPLIFIED
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Icon
+//
+
+IDI_PDBVIEWER          ICON                    "PDBViewer.ico"
+IDI_SMALL              ICON                    "small.ico"
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Dialog
+//
+
+IDD_ABOUTBOX DIALOGEX 0, 0, 170, 62
+STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "关于 PDB Insight"
+FONT 9, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+    ICON            IDI_PDBVIEWER,IDC_STATIC,14,14,21,20
+    LTEXT           "PDB Insight, Version 1.0",IDC_STATIC,42,14,114,8,SS_NOPREFIX
+    LTEXT           "Copyright (C) 2026 StackAndPointer",IDC_STATIC,42,26,114,8
+    DEFPUSHBUTTON   "确定",IDOK,113,41,50,14,WS_GROUP
+END
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// String Table
+//
+
+STRINGTABLE
+BEGIN
+    IDC_PDBVIEWER           "PDBINSIGHT"
+    IDS_APP_TITLE           "PDB Insight"
+END
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Version
+//
+
+1 VERSIONINFO
+ FILEVERSION 1,0,0,0
+ PRODUCTVERSION 1,0,0,0
+ FILEFLAGSMASK 0x3fL
+#ifdef _DEBUG
+ FILEFLAGS 0x1L
+#else
+ FILEFLAGS 0x0L
+#endif
+ FILEOS 0x40004L
+ FILETYPE 0x1L
+ FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "080404b0"
+        BEGIN
+            VALUE "CompanyName", "StackAndPointer"
+            VALUE "FileDescription", "PDB Insight - PDB Viewer"
+            VALUE "FileVersion", "1.0.0.0"
+            VALUE "InternalName", "PDBInsight"
+            VALUE "LegalCopyright", "Copyright (C) 2026 StackAndPointer"
+            VALUE "OriginalFilename", "PDB Insight.exe"
+            VALUE "ProductName", "PDB Insight"
+            VALUE "ProductVersion", "1.0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x804, 1200
+    END
+END
+
+#endif
+
+/////////////////////////////////////////////////////////////////////////////

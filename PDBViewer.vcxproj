@@ -1,0 +1,203 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>17.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{aa4d4549-8ed7-44f3-bd56-289bfaf84356}</ProjectGuid>
+    <RootNamespace>PDB Insight</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <ProjectName>PDB Insight</ProjectName>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)src;$(ProjectDir)src\Core;$(ProjectDir)src\Managers;$(ProjectDir)src\PDB;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)src;$(ProjectDir)src\Core;$(ProjectDir)src\Managers;$(ProjectDir)src\PDB;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)src;$(ProjectDir)src\Core;$(ProjectDir)src\Managers;$(ProjectDir)src\PDB;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)src;$(ProjectDir)src\Core;$(ProjectDir)src\Managers;$(ProjectDir)src\PDB;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClInclude Include="framework.h" />
+    <ClInclude Include="src\Core\MainWindow.h" />
+    <ClInclude Include="src\Core\PDBViewer.h" />
+    <ClInclude Include="targetver.h" />
+    <ClInclude Include="src\Managers\ConfigManager.h" />
+    <ClInclude Include="src\Managers\ControlsManager.h" />
+    <ClInclude Include="src\Managers\DragDropManager.h" />
+    <ClInclude Include="src\Managers\DPIManager.h" />
+    <ClInclude Include="src\Managers\ExportEnhancer.h" />
+    <ClInclude Include="src\Managers\ExportManager.h" />
+    <ClInclude Include="src\Managers\FontManager.h" />
+    <ClInclude Include="src\Managers\FunctionInfoDisplayManager.h" />
+    <ClInclude Include="src\Managers\GlobalVarAddressManager.h" />
+    <ClInclude Include="src\Managers\HeaderViewManager.h" />
+    <ClInclude Include="src\Managers\LanguageManager.h" />
+    <ClInclude Include="src\Managers\ListViewManager.h" />
+    <ClInclude Include="src\Managers\MenuManager.h" />
+    <ClInclude Include="src\Managers\PDBViewerGlobals.h" />
+    <ClInclude Include="src\Managers\SearchManager.h" />
+    <ClInclude Include="src\Managers\SearchOptimizer.h" />
+    <ClInclude Include="src\Managers\SettingsManager.h" />
+    <ClInclude Include="src\Managers\TreeViewManager.h" />
+    <ClInclude Include="src\PDB\cvConst.h" />
+    <ClInclude Include="src\PDB\dia2.h" />
+    <ClInclude Include="src\PDB\diaCreate.h" />
+    <ClInclude Include="src\PDB\PDBData.h" />
+    <ClInclude Include="src\PDB\PDBExporter.h" />
+    <ClInclude Include="src\PDB\PDBHeaderGenerator.h" />
+    <ClInclude Include="src\PDB\PDBParser.h" />
+    <ClInclude Include="Resource.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="src\Core\MainWindow.cpp" />
+    <ClCompile Include="src\Core\PDBViewer.cpp" />
+    <ClCompile Include="src\Managers\ConfigManager.cpp" />
+    <ClCompile Include="src\Managers\ControlsManager.cpp" />
+    <ClCompile Include="src\Managers\DragDropManager.cpp" />
+    <ClCompile Include="src\Managers\DPIManager.cpp" />
+    <ClCompile Include="src\Managers\ExportEnhancer.cpp" />
+    <ClCompile Include="src\Managers\ExportManager.cpp" />
+    <ClCompile Include="src\Managers\FontManager.cpp" />
+    <ClCompile Include="src\Managers\FunctionInfoDisplayManager.cpp" />
+    <ClCompile Include="src\Managers\GlobalVarAddressManager.cpp" />
+    <ClCompile Include="src\Managers\HeaderViewManager.cpp" />
+    <ClCompile Include="src\Managers\LanguageManager.cpp" />
+    <ClCompile Include="src\Managers\ListViewManager.cpp" />
+    <ClCompile Include="src\Managers\MenuManager.cpp" />
+    <ClCompile Include="src\Managers\PDBViewerGlobals.cpp" />
+    <ClCompile Include="src\Managers\SearchManager.cpp" />
+    <ClCompile Include="src\Managers\SearchOptimizer.cpp" />
+    <ClCompile Include="src\Managers\SettingsManager.cpp" />
+    <ClCompile Include="src\Managers\TreeViewManager.cpp" />
+    <ClCompile Include="src\PDB\diaCreate.cpp" />
+    <ClCompile Include="src\PDB\PDBExporter.cpp" />
+    <ClCompile Include="src\PDB\PDBHeaderGenerator.cpp" />
+    <ClCompile Include="src\PDB\PDBParser.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="PDBViewer.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="PDBViewer.ico" />
+    <Image Include="small.ico" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>
