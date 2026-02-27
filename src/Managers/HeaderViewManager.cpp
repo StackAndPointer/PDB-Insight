@@ -82,8 +82,7 @@ void ShowHeaderView(HTREEITEM hItem)
             }
         }
 
-        if (pClass)
-        {
+        if (pClass) {
             std::wostringstream ss;
             ss << L"// Auto-generated class/struct definition\r\n\r\n";
             
@@ -93,28 +92,48 @@ void ShowHeaderView(HTREEITEM hItem)
             settings.idaCompatible = false;
             settings.includeEnumsInEnumsH = false;
             
-            if (pClass->isUnion)
-            {
+            if (pClass->isUnion) {
                 ss << PDBHeaderGenerator::GenerateUnionDeclaration(*pClass, settings, g_numberMode, g_expandBaseClasses, &g_moduleInfo);
-            }
-            else if (pClass->isStruct)
-            {
+            } else if (pClass->isStruct) {
                 ss << PDBHeaderGenerator::GenerateStructDeclaration(*pClass, settings, g_numberMode, g_expandBaseClasses, &g_moduleInfo);
-            }
-            else
-            {
+            } else {
                 ss << PDBHeaderGenerator::GenerateClassDeclaration(*pClass, settings, g_numberMode, g_expandBaseClasses, &g_moduleInfo);
+            }
+            
+            if (!pClass->virtualFunctions.empty()) {
+                ss << L"\r\n// Virtual Function Table:\r\n";
+                ss << L"//=======================================\r\n";
+                for (size_t i = 0; i < pClass->virtualFunctions.size(); ++i) {
+                    const auto& vfunc = pClass->virtualFunctions[i];
+                    ss << L"// [" << vfunc.vtableIndex << L"] " << vfunc.returnType << L" " << vfunc.name << L"(";
+                    for (size_t j = 0; j < vfunc.parameters.size(); ++j) {
+                        if (j > 0) ss << L", ";
+                        ss << vfunc.parameters[j].type;
+                        if (!vfunc.parameters[j].name.empty()) {
+                            ss << L" " << vfunc.parameters[j].name;
+                        }
+                    }
+                    ss << L")";
+                    if (vfunc.rva != 0) {
+                        ss << L" // RVA: 0x" << std::hex << vfunc.rva;
+                    }
+                    if (vfunc.virtualAddress != 0) {
+                        if (vfunc.rva != 0) ss << L", ";
+                        ss << L" VA: 0x" << std::hex << vfunc.virtualAddress;
+                    }
+                    ss << L"\r\n";
+                }
+                ss << L"//=======================================\r\n";
             }
             
             ss << L"\r\n// Additional Information:\r\n";
             ss << L"// Size: " << PDBHeaderGenerator::FormatNumber(pClass->size, g_numberMode) << L" bytes\r\n";
             ss << L"// Member count: " << pClass->members.size() << L"\r\n";
+            ss << L"// Virtual function count: " << pClass->virtualFunctions.size() << L"\r\n";
             
-            if (!pClass->baseClasses.empty())
-            {
+            if (!pClass->baseClasses.empty()) {
                 ss << L"// Base classes: ";
-                for (size_t i = 0; i < pClass->baseClasses.size(); ++i)
-                {
+                for (size_t i = 0; i < pClass->baseClasses.size(); ++i) {
                     if (i > 0) ss << L", ";
                     ss << pClass->baseClasses[i].name;
                 }

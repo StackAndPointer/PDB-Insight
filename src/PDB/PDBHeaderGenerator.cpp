@@ -333,6 +333,31 @@ std::wstring PDBHeaderGenerator::GenerateClassDeclaration(const ClassInfo& class
         }
     }
 
+    if (!classInfo.virtualFunctions.empty()) {
+        ss << L"\r\n    // --- Virtual Function Table --- \r\n";
+        ss << L"    //=======================================\r\n";
+        for (const auto& vfunc : classInfo.virtualFunctions) {
+            ss << L"    // [" << vfunc.vtableIndex << L"] " << vfunc.returnType << L" " << vfunc.name << L"(";
+            for (size_t j = 0; j < vfunc.parameters.size(); ++j) {
+                if (j > 0) ss << L", ";
+                ss << vfunc.parameters[j].type;
+                if (!vfunc.parameters[j].name.empty()) {
+                    ss << L" " << vfunc.parameters[j].name;
+                }
+            }
+            ss << L")";
+            if (vfunc.rva != 0) {
+                ss << L" // RVA: 0x" << std::hex << vfunc.rva;
+            }
+            if (vfunc.virtualAddress != 0) {
+                if (vfunc.rva != 0) ss << L", ";
+                ss << L" VA: 0x" << std::hex << vfunc.virtualAddress;
+            }
+            ss << L"\r\n";
+        }
+        ss << L"    //=======================================\r\n";
+    }
+
     ss << L"};\r\n";
 
     return ss.str();

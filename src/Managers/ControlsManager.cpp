@@ -126,8 +126,12 @@ void UpdateSplitterPosition(HWND hWnd)
 
     int minWidth = DPIManager::ScaleX(100);
     int maxWidth = rect.right - rect.left - DPIManager::ScaleX(200);
-    if (g_splitterPos < minWidth) g_splitterPos = minWidth;
-    if (g_splitterPos > maxWidth) g_splitterPos = maxWidth;
+    
+    // 确保splitter位置在合理范围内
+    if (g_splitterPos < minWidth || g_splitterPos > maxWidth) {
+        // 如果splitter位置不合理，设置为默认值
+        g_splitterPos = rect.right / 3;
+    }
 
     SetWindowPos(hTreeView, nullptr, 0, controlTop, g_splitterPos, controlHeight, SWP_NOZORDER);
     SetWindowPos(hSplitter, nullptr, g_splitterPos, controlTop, DPIManager::ScaleX(4), controlHeight, SWP_NOZORDER);

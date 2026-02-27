@@ -411,6 +411,52 @@ void PDBParser::ParseClassDetails(IDiaSymbol* pClass, ClassInfo& classInfo) {
         }
         pEnumFunc->Release();
     }
+
+    ParseVirtualFunctions(pClass, classInfo);
+}
+
+void PDBParser::ParseVirtualFunctions(IDiaSymbol* pClass, ClassInfo& classInfo) {
+    IDiaEnumSymbols* pEnumSymbols = nullptr;
+    if (SUCCEEDED(pClass->findChildren(SymTagFunction, nullptr, nsNone, &pEnumSymbols)) && pEnumSymbols) {
+        IDiaSymbol* pSymbol = nullptr;
+        ULONG celt = 0;
+        int vtableIndex = 0;
+        
+        while (SUCCEEDED(pEnumSymbols->Next(1, &pSymbol, &celt)) && celt == 1) {
+            BOOL isVirtual = FALSE;
+            if (SUCCEEDED(pSymbol->get_virtual(&isVirtual)) && isVirtual) {
+                VirtualFunctionInfo vfuncInfo;
+                vfuncInfo.name = GetSymbolName(pSymbol);
+                vfuncInfo.vtableIndex = vtableIndex++;
+                
+                IDiaSymbol* pType = nullptr;
+                if (SUCCEEDED(pSymbol->get_type(&pType)) && pType) {
+                    IDiaSymbol* pReturnType = nullptr;
+                    if (SUCCEEDED(pType->get_type(&pReturnType)) && pReturnType) {
+                        vfuncInfo.returnType = GetTypeName(pReturnType);
+                        pReturnType->Release();
+                    }
+                    pType->Release();
+                }
+                
+                ParseParameters(pSymbol, vfuncInfo.parameters);
+                
+                DWORD rva = 0;
+                if (SUCCEEDED(pSymbol->get_relativeVirtualAddress(&rva))) {
+                    vfuncInfo.rva = rva;
+                }
+                
+                ULONGLONG va = 0;
+                if (SUCCEEDED(pSymbol->get_virtualAddress(&va))) {
+                    vfuncInfo.virtualAddress = va;
+                }
+                
+                classInfo.virtualFunctions.push_back(vfuncInfo);
+            }
+            pSymbol->Release();
+        }
+        pEnumSymbols->Release();
+    }
 }
 
 void PDBParser::ParseFunctionDetails(IDiaSymbol* pFunction, FunctionInfo& funcInfo) {

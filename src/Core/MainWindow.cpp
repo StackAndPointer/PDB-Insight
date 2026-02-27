@@ -10,6 +10,7 @@
 #include "DragDropManager.h"
 #include "DPIManager.h"
 #include "SettingsManager.h"
+#include "CacheManager.h"
 
 #pragma comment(lib, "comctl32.lib")
 #pragma comment(lib, "shell32.lib")
@@ -139,25 +140,58 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow, LPWSTR lpCmdLine)
         }
         if (!filePath.empty())
         {
-            if (g_parser.LoadPDB(filePath))
+            size_t dotPos = filePath.find_last_of(L'.');
+            if (dotPos != std::wstring::npos)
             {
-                g_parser.SetProgressCallback([](int progress, const std::wstring& text) {
-                    std::wstring status = L"解析中: " + text + L" (" + std::to_wstring(progress) + L"%)";
-                    UpdateStatusBar(status);
-                    });
-                g_moduleInfo = g_parser.ParseModule();
-                g_moduleInfo.pdbFileName = filePath;
-                g_pdbLoaded = true;
+                std::wstring extension = filePath.substr(dotPos);
+                for (size_t i = 0; i < extension.length(); i++)
+                {
+                    extension[i] = towlower(extension[i]);
+                }
+                
+                if (extension == L".pdb")
+                {
+                    if (g_parser.LoadPDB(filePath))
+                    {
+                        g_parser.SetProgressCallback([](int progress, const std::wstring& text) {
+                            std::wstring status = L"解析中: " + text + L" (" + std::to_wstring(progress) + L"%)";
+                            UpdateStatusBar(status);
+                            });
+                        g_moduleInfo = g_parser.ParseModule();
+                        g_moduleInfo.pdbFileName = filePath;
+                        g_pdbLoaded = true;
 
-                PopulateTreeView();
+                        PopulateTreeView();
 
-                std::wstringstream ss;
-                ss << L"已加载: " << filePath
-                    << L" | 函数: " << g_moduleInfo.functions.size()
-                    << L" | 类: " << g_moduleInfo.classes.size()
-                    << L" | 结构体: " << g_moduleInfo.structs.size()
-                    << L" | 联合体: " << g_moduleInfo.unions.size();
-                UpdateStatusBar(ss.str());
+                        std::wstringstream ss;
+                        ss << L"已加载: " << filePath
+                            << L" | 函数: " << g_moduleInfo.functions.size()
+                            << L" | 类: " << g_moduleInfo.classes.size()
+                            << L" | 结构体: " << g_moduleInfo.structs.size()
+                            << L" | 联合体: " << g_moduleInfo.unions.size();
+                        UpdateStatusBar(ss.str());
+                    }
+                }
+                else if (extension == L".pdbbc")
+                {
+                    ModuleInfo moduleInfo;
+                    std::wstring errorMsg;
+                    if (CacheManager::GetInstance().LoadCache(moduleInfo, filePath, errorMsg))
+                    {
+                        g_moduleInfo = moduleInfo;
+                        g_pdbLoaded = true;
+
+                        PopulateTreeView();
+
+                        std::wstringstream ss;
+                        ss << L"已从缓存加载: " << filePath
+                            << L" | 函数: " << g_moduleInfo.functions.size()
+                            << L" | 类: " << g_moduleInfo.classes.size()
+                            << L" | 结构体: " << g_moduleInfo.structs.size()
+                            << L" | 联合体: " << g_moduleInfo.unions.size();
+                        UpdateStatusBar(ss.str());
+                    }
+                }
             }
         }
     }
@@ -182,6 +216,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             break;
         case ID_MENU_OPEN:
             OpenPDBFile(hWnd);
+            break;
+        case ID_MENU_OPEN_CACHE:
+            OpenCacheFile(hWnd);
             break;
         case ID_MENU_EXPORT_CSV:
             ExportToCSV(hWnd);

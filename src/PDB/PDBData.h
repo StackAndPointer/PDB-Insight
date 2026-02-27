@@ -70,6 +70,15 @@ struct BaseClassInfo {
     AccessType access;
 };
 
+struct VirtualFunctionInfo {
+    std::wstring name;
+    std::wstring returnType;
+    std::vector<ParameterInfo> parameters;
+    DWORD rva;
+    ULONGLONG virtualAddress;
+    int vtableIndex;
+};
+
 struct ClassInfo {
     std::wstring name;
     ULONGLONG size;
@@ -77,6 +86,7 @@ struct ClassInfo {
     std::vector<BaseClassInfo> baseClasses;
     std::vector<MemberVariableInfo> members;
     std::vector<std::wstring> memberFunctions;
+    std::vector<VirtualFunctionInfo> virtualFunctions;
     bool isStruct;
     bool isUnion;
 };

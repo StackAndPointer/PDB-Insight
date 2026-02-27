@@ -62,6 +62,7 @@ void RebuildMenu(HWND hWnd)
 
     HMENU hFileMenu = CreatePopupMenu();
     AppendMenuW(hFileMenu, MF_STRING, ID_MENU_OPEN, LanguageManager::GetInstance().GetString(L"menu_open", L"打开 PDB 文件(&O)...").c_str());
+    AppendMenuW(hFileMenu, MF_STRING, ID_MENU_OPEN_CACHE, LanguageManager::GetInstance().GetString(L"menu_open_cache", L"打开 PDB 缓存文件(&C)...").c_str());
     AppendMenuW(hFileMenu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(hFileMenu, MF_STRING, ID_MENU_EXPORT_CSV, LanguageManager::GetInstance().GetString(L"menu_export_csv", L"导出全部为 CSV(&C)...").c_str());
     AppendMenuW(hFileMenu, MF_STRING, ID_MENU_EXPORT_FUNCTIONS_CSV, LanguageManager::GetInstance().GetString(L"menu_export_functions_csv", L"导出函数为 CSV(&F)...").c_str());
@@ -140,6 +141,7 @@ void AutoAssociatePDBFiles()
     HKEY hKey;
     LONG result;
 
+    // 关联 .pdb 文件
     result = RegCreateKeyExW(HKEY_CURRENT_USER, L"Software\\Classes\\.pdb", 0, nullptr, 0, KEY_WRITE, nullptr, &hKey, nullptr);
     if (result == ERROR_SUCCESS) {
         std::wstring value = L"PDB Insight.PDBFile";
@@ -161,13 +163,45 @@ void AutoAssociatePDBFiles()
         RegCloseKey(hKey);
     }
 
-    result = RegCreateKeyExW(HKEY_CURRENT_USER, L"Software\\Classes\\PDBViewer.PDBFile\\DefaultIcon", 0, nullptr, 0, KEY_WRITE, nullptr, &hKey, nullptr);
+    // 关联 .pdbbc 文件
+    result = RegCreateKeyExW(HKEY_CURRENT_USER, L"Software\\Classes\\.pdbbc", 0, nullptr, 0, KEY_WRITE, nullptr, &hKey, nullptr);
     if (result == ERROR_SUCCESS) {
-        std::wstring icon = std::wstring(L"\"") + modulePath + L"\",0";
-        RegSetValueExW(hKey, nullptr, 0, REG_SZ, (const BYTE*)icon.c_str(), (DWORD)(icon.length() + 1) * sizeof(WCHAR));
+        std::wstring value = L"PDB Insight.PDBCacheFile";
+        RegSetValueExW(hKey, nullptr, 0, REG_SZ, (const BYTE*)value.c_str(), (DWORD)(value.length() + 1) * sizeof(WCHAR));
         RegCloseKey(hKey);
     }
 
+    result = RegCreateKeyExW(HKEY_CURRENT_USER, L"Software\\Classes\\PDB Insight.PDBCacheFile", 0, nullptr, 0, KEY_WRITE, nullptr, &hKey, nullptr);
+    if (result == ERROR_SUCCESS) {
+        std::wstring value = L"PDB Cache File";
+        RegSetValueExW(hKey, nullptr, 0, REG_SZ, (const BYTE*)value.c_str(), (DWORD)(value.length() + 1) * sizeof(WCHAR));
+        RegCloseKey(hKey);
+    }
+
+    result = RegCreateKeyExW(HKEY_CURRENT_USER, L"Software\\Classes\\PDB Insight.PDBCacheFile\\shell\\open\\command", 0, nullptr, 0, KEY_WRITE, nullptr, &hKey, nullptr);
+    if (result == ERROR_SUCCESS) {
+        std::wstring command = std::wstring(L"\"") + modulePath + L"\" \"%1\"";
+        RegSetValueExW(hKey, nullptr, 0, REG_SZ, (const BYTE*)command.c_str(), (DWORD)(command.length() + 1) * sizeof(WCHAR));
+        RegCloseKey(hKey);
+    }
+
+    // 添加图标关联
+    result = RegCreateKeyExW(HKEY_CURRENT_USER, L"Software\\Classes\\PDB Insight.PDBCacheFile\\DefaultIcon", 0, nullptr, 0, KEY_WRITE, nullptr, &hKey, nullptr);
+    if (result == ERROR_SUCCESS) {
+        std::wstring iconPath = std::wstring(L"\"") + modulePath + L"\", 0";
+        RegSetValueExW(hKey, nullptr, 0, REG_SZ, (const BYTE*)iconPath.c_str(), (DWORD)(iconPath.length() + 1) * sizeof(WCHAR));
+        RegCloseKey(hKey);
+    }
+
+    // 为 PDB 文件添加图标关联
+    result = RegCreateKeyExW(HKEY_CURRENT_USER, L"Software\\Classes\\PDB Insight.PDBFile\\DefaultIcon", 0, nullptr, 0, KEY_WRITE, nullptr, &hKey, nullptr);
+    if (result == ERROR_SUCCESS) {
+        std::wstring iconPath = std::wstring(L"\"") + modulePath + L"\", 0";
+        RegSetValueExW(hKey, nullptr, 0, REG_SZ, (const BYTE*)iconPath.c_str(), (DWORD)(iconPath.length() + 1) * sizeof(WCHAR));
+        RegCloseKey(hKey);
+    }
+
+    // 通知系统文件关联已更改
     SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
 }
 
@@ -182,6 +216,7 @@ void UnassociatePDBFiles(HWND hWnd)
     HKEY hKey;
     LONG result;
 
+    // 取消 .pdb 文件关联
     result = RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\Classes\\.pdb", 0, KEY_READ | KEY_WRITE, &hKey);
     if (result == ERROR_SUCCESS) {
         WCHAR currentValue[MAX_PATH];
@@ -193,8 +228,21 @@ void UnassociatePDBFiles(HWND hWnd)
         RegCloseKey(hKey);
     }
 
+    // 取消 .pdbbc 文件关联
+    result = RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\Classes\\.pdbbc", 0, KEY_READ | KEY_WRITE, &hKey);
+    if (result == ERROR_SUCCESS) {
+        WCHAR currentValue[MAX_PATH];
+        DWORD valueSize = sizeof(currentValue);
+        result = RegQueryValueExW(hKey, nullptr, nullptr, nullptr, (LPBYTE)currentValue, &valueSize);
+        if (result == ERROR_SUCCESS && wcscmp(currentValue, L"PDB Insight.PDBCacheFile") == 0) {
+            RegDeleteValueW(hKey, nullptr);
+        }
+        RegCloseKey(hKey);
+    }
+
     RegDeleteTreeW(HKEY_CURRENT_USER, L"Software\\Classes\\PDB Insight.PDBFile");
+    RegDeleteTreeW(HKEY_CURRENT_USER, L"Software\\Classes\\PDB Insight.PDBCacheFile");
 
     SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
-    MessageBoxW(hWnd, L"已取消 PDB 文件关联！", L"提示", MB_OK | MB_ICONINFORMATION);
+    MessageBoxW(hWnd, L"已取消 PDB 文件和缓存文件关联！", L"提示", MB_OK | MB_ICONINFORMATION);
 }

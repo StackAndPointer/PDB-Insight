@@ -261,7 +261,31 @@ void PopulateListView(HTREEITEM hItem)
             }
             
             addItem(LanguageManager::GetInstance().GetString(L"prop_member_count", L"成员数量"), std::to_wstring(pClass->members.size()));
+            addItem(LanguageManager::GetInstance().GetString(L"col_virtual_function_count", L"虚函数数量"), std::to_wstring(pClass->virtualFunctions.size()));
             addItem(L"", L"");
+            
+            if (!pClass->virtualFunctions.empty())
+            {
+                addItem(LanguageManager::GetInstance().GetString(L"prop_virtual_function_table", L"--- 虚函数表 ---"), L"");
+                for (size_t i = 0; i < pClass->virtualFunctions.size(); ++i)
+                {
+                    const auto& vfunc = pClass->virtualFunctions[i];
+                    std::wstringstream ssVFunc;
+                    ssVFunc << L"[" << vfunc.vtableIndex << L"] " << vfunc.returnType << L" " << vfunc.name;
+                    std::wstringstream ssAddr;
+                    if (vfunc.rva != 0)
+                    {
+                        ssAddr << L"RVA: 0x" << std::hex << vfunc.rva;
+                    }
+                    if (vfunc.virtualAddress != 0)
+                    {
+                        if (vfunc.rva != 0) ssAddr << L", ";
+                        ssAddr << L"VA: 0x" << std::hex << vfunc.virtualAddress;
+                    }
+                    addItem(ssVFunc.str(), ssAddr.str());
+                }
+                addItem(L"", L"");
+            }
             
             if (g_expandBaseClasses && !pClass->baseClasses.empty())
             {

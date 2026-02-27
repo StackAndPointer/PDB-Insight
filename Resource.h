@@ -35,6 +35,7 @@
 #define IDC_GROUP_IDA_COMPATIBILITY     2018
 #define IDC_IDA_COMPATIBLE              2019
 #define ID_MENU_SETTINGS                3000
+#define ID_MENU_OPEN_CACHE              40001
 
 // Next default values for new objects
 // 

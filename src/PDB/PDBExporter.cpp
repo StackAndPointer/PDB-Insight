@@ -51,7 +51,7 @@ bool PDBExporter::ExportToCSV(const ModuleInfo& moduleInfo, const std::wstring& 
     }
 
     file << (isChinese ? L"\n=== Classes ===\n" : L"\n=== Classes ===\n");
-    file << (isChinese ? L"Name,Size,Alignment,Base Classes,Member Count\n" : L"Name,Size,Alignment,Base Classes,Member Count\n");
+    file << (isChinese ? L"Name,Size,Alignment,Base Classes,Member Count,Virtual Function Count\n" : L"Name,Size,Alignment,Base Classes,Member Count,Virtual Function Count\n");
     for (const auto& cls : moduleInfo.classes) {
         std::wstring baseClassesStr;
         for (size_t i = 0; i < cls.baseClasses.size(); ++i) {
@@ -59,11 +59,32 @@ bool PDBExporter::ExportToCSV(const ModuleInfo& moduleInfo, const std::wstring& 
             baseClassesStr += cls.baseClasses[i].name;
         }
         
-        file << EscapeCSV(cls.name) << L","
-             << cls.size << L","
-             << cls.alignment << L","
-             << EscapeCSV(baseClassesStr) << L","
-             << cls.members.size() << L"\n";
+        file << EscapeCSV(cls.name) << L"," 
+             << cls.size << L"," 
+             << cls.alignment << L"," 
+             << EscapeCSV(baseClassesStr) << L"," 
+             << cls.members.size() << L"," 
+             << cls.virtualFunctions.size() << L"\n";
+    }
+
+    file << (isChinese ? L"\n=== Virtual Functions ===\n" : L"\n=== Virtual Functions ===\n");
+    file << (isChinese ? L"Class Name,Function Name,Return Type,Parameters,RVA,Virtual Address,VTable Index\n" : L"Class Name,Function Name,Return Type,Parameters,RVA,Virtual Address,VTable Index\n");
+    for (const auto& cls : moduleInfo.classes) {
+        for (const auto& vfunc : cls.virtualFunctions) {
+            std::wstring paramsStr;
+            for (size_t i = 0; i < vfunc.parameters.size(); ++i) {
+                if (i > 0) paramsStr += L"; ";
+                paramsStr += vfunc.parameters[i].type + L" " + vfunc.parameters[i].name;
+            }
+            
+            file << EscapeCSV(cls.name) << L"," 
+                 << EscapeCSV(vfunc.name) << L"," 
+                 << EscapeCSV(vfunc.returnType) << L"," 
+                 << EscapeCSV(paramsStr) << L"," 
+                 << std::hex << std::showbase << vfunc.rva << L"," 
+                 << std::hex << std::showbase << vfunc.virtualAddress << L"," 
+                 << vfunc.vtableIndex << L"\n";
+        }
     }
 
     file << (isChinese ? L"\n=== Global Variables ===\n" : L"\n=== Global Variables ===\n");
@@ -262,6 +283,33 @@ bool PDBExporter::ExportToXML(const ModuleInfo& moduleInfo, const std::wstring& 
                  << L"\" comment=\"\"/>\n";
         }
         file << L"        </Members>\n";
+
+        if (!cls.virtualFunctions.empty()) {
+            file << L"        <VirtualFunctions comment=\"\">\n";
+            for (const auto& vfunc : cls.virtualFunctions) {
+                std::wstringstream ssRVA, ssVA, ssIndex;
+                ssRVA << std::hex << std::showbase << vfunc.rva;
+                ssVA << std::hex << std::showbase << vfunc.virtualAddress;
+                ssIndex << vfunc.vtableIndex;
+
+                file << L"          <VirtualFunction name=\"" << EscapeXML(vfunc.name)
+                     << L"\" returnType=\"" << EscapeXML(vfunc.returnType)
+                     << L"\" rva=\"" << ssRVA.str()
+                     << L"\" virtualAddress=\"" << ssVA.str()
+                     << L"\" vtableIndex=\"" << ssIndex.str()
+                     << L"\" comment=\"\">\n";
+
+                file << L"            <Parameters comment=\"\">\n";
+                for (const auto& param : vfunc.parameters) {
+                    file << L"              <Parameter name=\"" << EscapeXML(param.name)
+                         << L"\" type=\"" << EscapeXML(param.type)
+                         << L"\" comment=\"\"/\n";
+                }
+                file << L"            </Parameters>\n";
+                file << L"          </VirtualFunction>\n";
+            }
+            file << L"        </VirtualFunctions>\n";
+        }
 
         file << L"      </Class>\n";
     }

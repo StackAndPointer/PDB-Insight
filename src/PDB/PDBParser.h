@@ -39,6 +39,7 @@ private:
     void ParseClassDetails(IDiaSymbol* pClass, ClassInfo& classInfo);
     void ParseFunctionDetails(IDiaSymbol* pFunction, FunctionInfo& funcInfo);
     void ParseParameters(IDiaSymbol* pFunction, std::vector<ParameterInfo>& params);
+    void ParseVirtualFunctions(IDiaSymbol* pClass, ClassInfo& classInfo);
     std::wstring GetSymbolName(IDiaSymbol* pSymbol);
     std::wstring GetUndecoratedName(IDiaSymbol* pSymbol);
     std::wstring GetTypeName(IDiaSymbol* pType);
