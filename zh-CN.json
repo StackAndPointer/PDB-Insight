@@ -162,5 +162,6 @@
     "opt_ida_compatible": "IDA兼容格式(纯C结构体)",
     
     "button_ok": "确定",
-    "button_cancel": "取消"
+    "button_cancel": "取消",
+    "info_export_hint": "如果符号信息查看不全请导出后查看"
 }

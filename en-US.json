@@ -162,5 +162,6 @@
     "opt_ida_compatible": "IDA Compatible Format(Pure C Struct)",
     
     "button_ok": "OK",
-    "button_cancel": "Cancel"
+    "button_cancel": "Cancel",
+    "info_export_hint": "If symbol information is incomplete, please export to view"
 }

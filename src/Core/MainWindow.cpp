@@ -10,7 +10,7 @@
 #include "DragDropManager.h"
 #include "DPIManager.h"
 #include "SettingsManager.h"
-#include "CacheManager.h"
+
 
 #pragma comment(lib, "comctl32.lib")
 #pragma comment(lib, "shell32.lib")
@@ -172,26 +172,7 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow, LPWSTR lpCmdLine)
                         UpdateStatusBar(ss.str());
                     }
                 }
-                else if (extension == L".pdbbc")
-                {
-                    ModuleInfo moduleInfo;
-                    std::wstring errorMsg;
-                    if (CacheManager::GetInstance().LoadCache(moduleInfo, filePath, errorMsg))
-                    {
-                        g_moduleInfo = moduleInfo;
-                        g_pdbLoaded = true;
 
-                        PopulateTreeView();
-
-                        std::wstringstream ss;
-                        ss << L"已从缓存加载: " << filePath
-                            << L" | 函数: " << g_moduleInfo.functions.size()
-                            << L" | 类: " << g_moduleInfo.classes.size()
-                            << L" | 结构体: " << g_moduleInfo.structs.size()
-                            << L" | 联合体: " << g_moduleInfo.unions.size();
-                        UpdateStatusBar(ss.str());
-                    }
-                }
             }
         }
     }
@@ -217,9 +198,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         case ID_MENU_OPEN:
             OpenPDBFile(hWnd);
             break;
-        case ID_MENU_OPEN_CACHE:
-            OpenCacheFile(hWnd);
-            break;
+
         case ID_MENU_EXPORT_CSV:
             ExportToCSV(hWnd);
             break;

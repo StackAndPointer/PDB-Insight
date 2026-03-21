@@ -33,4 +33,5 @@ private:
     static std::wstring EscapeForHeader(const std::wstring& str);
     static const ClassInfo* FindClassInfo(const std::wstring& className, const ModuleInfo* moduleInfo);
     static std::wstring GetIndent(const ExportSettings& settings, int level);
+    static std::pair<std::wstring, std::wstring> SplitTypeAndArrayDimensions(const std::wstring& typeName);
 };

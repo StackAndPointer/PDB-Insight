@@ -31,7 +31,7 @@ CAPTION "关于 PDB Insight"
 FONT 9, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
     ICON            IDI_PDBVIEWER,IDC_STATIC,14,14,21,20
-    LTEXT           "PDB Insight, Version 1.0",IDC_STATIC,42,14,114,8,SS_NOPREFIX
+    LTEXT           "PDB Insight, Version 1.2",IDC_STATIC,42,14,114,8,SS_NOPREFIX
     LTEXT           "Copyright (C) 2026 StackAndPointer",IDC_STATIC,42,26,114,8
     DEFPUSHBUTTON   "确定",IDOK,113,41,50,14,WS_GROUP
 END
@@ -53,8 +53,8 @@ END
 //
 
 1 VERSIONINFO
- FILEVERSION 1,1,0,0
- PRODUCTVERSION 1,1,0,0
+ FILEVERSION 1,2,0,0
+ PRODUCTVERSION 1,2,0,0
  FILEFLAGSMASK 0x3fL
 #ifdef _DEBUG
  FILEFLAGS 0x1L
@@ -71,12 +71,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "StackAndPointer"
             VALUE "FileDescription", "PDB Insight - PDB Viewer"
-            VALUE "FileVersion", "1.0.0.0"
+            VALUE "FileVersion", "1.2.0.0"
             VALUE "InternalName", "PDBInsight"
             VALUE "LegalCopyright", "Copyright (C) 2026 StackAndPointer"
             VALUE "OriginalFilename", "PDB Insight.exe"
             VALUE "ProductName", "PDB Insight"
-            VALUE "ProductVersion", "1.1"
+            VALUE "ProductVersion", "1.2"
         END
     END
     BLOCK "VarFileInfo"

@@ -142,6 +142,11 @@ void UpdateSplitterPosition(HWND hWnd)
     TabCtrl_AdjustRect(hTabCtrl, FALSE, &tabRect);
     SetWindowPos(hListView, nullptr, tabRect.left, tabRect.top, tabRect.right - tabRect.left, tabRect.bottom - tabRect.top, SWP_NOZORDER);
     SetWindowPos(hRichEdit, nullptr, tabRect.left, tabRect.top, tabRect.right - tabRect.left, tabRect.bottom - tabRect.top, SWP_NOZORDER);
+
+    // 调整提示文本控件位置
+    if (hInfoText) {
+        SetWindowPos(hInfoText, nullptr, 0, rect.bottom - statusBarHeight - DPIManager::ScaleY(20), rect.right - rect.left, DPIManager::ScaleY(20), SWP_NOZORDER);
+    }
 }
 
 LRESULT CALLBACK RichEditProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
@@ -363,6 +368,12 @@ void CreateControls(HWND hWnd)
         WS_CHILD | WS_VISIBLE,
         0, 0, 0, 0, hWnd, (HMENU)ID_STATUSBAR, hInst, nullptr);
     SendMessage(hStatusBar, SB_SETPARTS, 1, (LPARAM)statusParts);
+
+    // 创建提示文本控件
+    hInfoText = CreateWindowExW(0, L"STATIC", LanguageManager::GetInstance().GetString(L"info_export_hint", L"如果符号信息查看不全请导出后查看").c_str(),
+        WS_CHILD | WS_VISIBLE | SS_CENTER,
+        0, 0, 0, 0, hWnd, (HMENU)ID_INFO_TEXT, hInst, nullptr);
+    SendMessageW(hInfoText, WM_SETFONT, (WPARAM)FontManager::GetHeaderViewFont(), TRUE);
 
     UpdateStatusBar(LanguageManager::GetInstance().GetString(L"status_ready", L"就绪 - 请打开一个 PDB 文件"));
 }

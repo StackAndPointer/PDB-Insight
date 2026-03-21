@@ -50,6 +50,10 @@
 #define ID_BUTTON_SEARCH_HISTORY 3011
 #endif
 
+#ifndef ID_INFO_TEXT
+#define ID_INFO_TEXT 3012
+#endif
+
 
 
 #ifndef ID_MENU_OPEN
@@ -165,6 +169,7 @@ extern HWND hEditSearch;
 extern HWND hButtonSearch;
 extern HWND hButtonSearchHistory;
 extern HWND hSplitter;
+extern HWND hInfoText;
 
 extern bool g_splitterDragging;
 extern int g_splitterPos;

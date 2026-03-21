@@ -13,6 +13,7 @@ HWND hEditSearch = nullptr;
 HWND hButtonSearch = nullptr;
 HWND hButtonSearchHistory = nullptr;
 HWND hSplitter = nullptr;
+HWND hInfoText = nullptr;
 
 bool g_splitterDragging = false;
 int g_splitterPos = 0;

@@ -3,7 +3,7 @@
 #include "ListViewManager.h"
 #include "HeaderViewManager.h"
 #include "LanguageManager.h"
-#include "CacheManager.h"
+
 
 void PopulateTreeView()
 {
@@ -81,31 +81,6 @@ void OpenPDBFile(HWND hWnd) {
     if (GetOpenFileNameW(&ofn)) {
         UpdateStatusBar(LanguageManager::GetInstance().GetString(L"status_loading", L"正在加载 PDB 文件..."));
         
-        // 检查是否存在缓存文件
-        if (CacheManager::GetInstance().CacheExists(ofn.lpstrFile)) {
-            // 尝试加载缓存文件
-            ModuleInfo cachedModuleInfo;
-            std::wstring cachePath = CacheManager::GetInstance().GetCacheFilePath(ofn.lpstrFile);
-            std::wstring errorMsg;
-            if (CacheManager::GetInstance().LoadCache(cachedModuleInfo, cachePath, errorMsg)) {
-                g_moduleInfo = cachedModuleInfo;
-                g_pdbLoaded = true;
-
-                PopulateTreeView();
-
-                std::wstringstream ss;
-                ss << LanguageManager::GetInstance().GetString(L"status_loaded_cache", L"已从缓存加载: ") << ofn.lpstrFile
-                   << L" | " << LanguageManager::GetInstance().GetString(L"tree_functions", L"函数: ") << g_moduleInfo.functions.size()
-                   << L" | " << LanguageManager::GetInstance().GetString(L"tree_classes", L"类: ") << g_moduleInfo.classes.size()
-                   << L" | " << LanguageManager::GetInstance().GetString(L"tree_structs", L"结构体: ") << g_moduleInfo.structs.size()
-                   << L" | " << LanguageManager::GetInstance().GetString(L"tree_unions", L"联合体: ") << g_moduleInfo.unions.size()
-                   << L" | " << LanguageManager::GetInstance().GetString(L"tree_enums", L"枚举: ") << g_moduleInfo.enums.size();
-                UpdateStatusBar(ss.str());
-                return;
-            }
-        }
-        
-        // 缓存不存在或加载失败，解析PDB文件
         if (g_parser.LoadPDB(ofn.lpstrFile)) {
             g_parser.SetProgressCallback([](int progress, const std::wstring& text) {
                 std::wstring status = LanguageManager::GetInstance().GetString(L"status_parsing", L"解析中: ") + text + L" (" + std::to_wstring(progress) + L"%)";
@@ -114,9 +89,6 @@ void OpenPDBFile(HWND hWnd) {
             g_moduleInfo = g_parser.ParseModule();
             g_moduleInfo.pdbFileName = ofn.lpstrFile;
             g_pdbLoaded = true;
-
-            // 保存缓存文件
-            CacheManager::GetInstance().SaveCache(g_moduleInfo, ofn.lpstrFile);
 
             PopulateTreeView();
 
@@ -138,48 +110,7 @@ void OpenPDBFile(HWND hWnd) {
     }
 }
 
-void OpenCacheFile(HWND hWnd) {
-    OPENFILENAMEW ofn;
-    WCHAR szFile[MAX_PATH] = L"";
-    WCHAR filterBuffer[] = L"PDB Cache Files (*.pdbbc)\0*.pdbbc\0All Files (*.*)\0*.*\0";
 
-    ZeroMemory(&ofn, sizeof(ofn));
-    ofn.lStructSize = sizeof(ofn);
-    ofn.hwndOwner = hWnd;
-    ofn.lpstrFilter = filterBuffer;
-    ofn.lpstrFile = szFile;
-    ofn.nMaxFile = MAX_PATH;
-    ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
-    ofn.lpstrDefExt = L"pdbbc";
-
-    if (GetOpenFileNameW(&ofn)) {
-        UpdateStatusBar(LanguageManager::GetInstance().GetString(L"status_loading_cache", L"正在加载缓存文件..."));
-        
-        ModuleInfo moduleInfo;
-        std::wstring errorMsg;
-        if (CacheManager::GetInstance().LoadCache(moduleInfo, ofn.lpstrFile, errorMsg)) {
-            g_moduleInfo = moduleInfo;
-            g_pdbLoaded = true;
-
-            PopulateTreeView();
-
-            std::wstringstream ss;
-            ss << LanguageManager::GetInstance().GetString(L"status_loaded_cache", L"已从缓存加载: ") << ofn.lpstrFile
-               << L" | " << LanguageManager::GetInstance().GetString(L"tree_functions", L"函数: ") << g_moduleInfo.functions.size()
-               << L" | " << LanguageManager::GetInstance().GetString(L"tree_classes", L"类: ") << g_moduleInfo.classes.size()
-               << L" | " << LanguageManager::GetInstance().GetString(L"tree_structs", L"结构体: ") << g_moduleInfo.structs.size()
-               << L" | " << LanguageManager::GetInstance().GetString(L"tree_unions", L"联合体: ") << g_moduleInfo.unions.size()
-               << L" | " << LanguageManager::GetInstance().GetString(L"tree_enums", L"枚举: ") << g_moduleInfo.enums.size();
-            UpdateStatusBar(ss.str());
-        }
-        else {
-            std::wstring fullErrorMsg = LanguageManager::GetInstance().GetString(L"msg_cache_load_fail", L"无法加载缓存文件: ") + errorMsg;
-            MessageBoxW(hWnd, fullErrorMsg.c_str(), 
-                       LanguageManager::GetInstance().GetString(L"msg_error", L"错误").c_str(), MB_OK | MB_ICONERROR);
-            UpdateStatusBar(L"加载失败");
-        }
-    }
-}
 
 void ClosePDBFile(HWND hWnd)
 {

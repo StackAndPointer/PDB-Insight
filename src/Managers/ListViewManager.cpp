@@ -94,8 +94,8 @@ void PopulateListView(HTREEITEM hItem)
     else if (param == 5)
     {
         AddListViewColumn(0, LanguageManager::GetInstance().GetString(L"col_name", L"名称"), 250);
-        AddListViewColumn(1, L"底层类型", 150);
-        AddListViewColumn(2, L"值数量", 100);
+        AddListViewColumn(1, LanguageManager::GetInstance().GetString(L"col_type", L"类型"), 150);
+        AddListViewColumn(2, LanguageManager::GetInstance().GetString(L"col_member_count", L"值数量"), 100);
 
         for (size_t i = 0; i < g_moduleInfo.enums.size(); ++i)
         {
@@ -189,7 +189,7 @@ void PopulateListView(HTREEITEM hItem)
             addItem(LanguageManager::GetInstance().GetString(L"prop_class", L"所属类"), func.className.empty() ? L"(无)" : func.className);
 
             if (func.parameters.empty()) {
-                addItem(L"参数", L"(无参数)");
+                addItem(LanguageManager::GetInstance().GetString(L"prop_param_prefix", L"参数"), L"(无参数)");
             } else {
                 for (size_t i = 0; i < func.parameters.size(); ++i)
                 {
@@ -202,7 +202,7 @@ void PopulateListView(HTREEITEM hItem)
                 }
             }
             
-            addItem(L"信息完整性", FunctionInfoDisplayManager::FormatCompletenessLabel(displayInfo.completenessPercent));
+            addItem(LanguageManager::GetInstance().GetString(L"prop_virtual_functions", L"信息完整性"), FunctionInfoDisplayManager::FormatCompletenessLabel(displayInfo.completenessPercent));
         }
     }
     else if (param >= 3000 && param < 6000)
@@ -385,10 +385,10 @@ void PopulateListView(HTREEITEM hItem)
             };
             
             addItem(LanguageManager::GetInstance().GetString(L"prop_name", L"名称"), enm.name);
-            addItem(L"底层类型", enm.underlyingType);
-            addItem(L"值数量", std::to_wstring(enm.values.size()));
+            addItem(LanguageManager::GetInstance().GetString(L"col_type", L"底层类型"), enm.underlyingType);
+            addItem(LanguageManager::GetInstance().GetString(L"col_member_count", L"值数量"), std::to_wstring(enm.values.size()));
             addItem(L"", L"");
-            addItem(L"--- 枚举值列表 ---", L"");
+            addItem(LanguageManager::GetInstance().GetString(L"prop_members_list", L"--- 枚举值列表 ---"), L"");
             
             for (size_t i = 0; i < enm.values.size(); ++i)
             {

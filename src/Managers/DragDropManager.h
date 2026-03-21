@@ -1,7 +1,6 @@
 #pragma once
 
 #include "PDBViewerGlobals.h"
-#include "CacheManager.h"
 
 class DragDropManager {
 public:
