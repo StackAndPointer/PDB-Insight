@@ -104,7 +104,4 @@ This project is open source.
 =======
 - RichEdit 控件
 
-## 联系方式
 
-
->>>>>>> 013680e50c06d2b222125a07491cbe87332f972a
