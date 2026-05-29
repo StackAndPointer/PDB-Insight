@@ -41,7 +41,6 @@ A powerful, lightweight PDB (Program Database) viewer tool based on Win32 API an
 - **CSV Format** - Export all data, functions only, or classes only
 - **XML Format** - Structured export of all symbol information
 - **C++ Headers** - Export single class or batch export all headers
-- **IDA Compatible** - Generate pure C struct declarations for IDA
 - **Enhanced Options** - Flatten namespaces, remove void params, include address comments
 
 ### Search Function
@@ -206,11 +205,6 @@ PDBViewer/
 
 ---
 
-## License
-
-This project is open source.
-
----
 
 ## Author
 
