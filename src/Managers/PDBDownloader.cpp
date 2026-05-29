@@ -74,10 +74,10 @@ std::wstring PDBDownloader::BuildMicrosoftSymbolUrl(const std::wstring& pdbName,
             if (baseUrl.back() != L'/') {
                 baseUrl += L'/';
             }
-        } else {
-            baseUrl = L"https://symbols.yandex.ru/";
         }
-    } else {
+    }
+    
+    if (baseUrl.empty()) {
         baseUrl = L"https://msdl.microsoft.com/download/symbols/";
     }
     

@@ -123,9 +123,6 @@ void SettingsManager::InitControls(HWND hWnd) {
     SendMessageW(m_hCheckUseMirrorSource, BM_SETCHECK, ConfigManager::GetInstance().GetUseMirrorSource() ? BST_CHECKED : BST_UNCHECKED, 0);
     
     std::wstring mirrorUrl = ConfigManager::GetInstance().GetMirrorSourceUrl();
-    if (mirrorUrl.empty()) {
-        mirrorUrl = L"https://symbols.yandex.ru/";
-    }
     SetWindowTextW(m_hEditMirrorUrl, mirrorUrl.c_str());
 }
 
