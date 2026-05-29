@@ -211,6 +211,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         case ID_MENU_OPEN:
             OpenPDBFile(hWnd);
             break;
+        case ID_MENU_OPEN_DLL:
+            OpenDllFile(hWnd);
+            break;
 
         case ID_MENU_EXPORT_CSV:
             ExportToCSV(hWnd);

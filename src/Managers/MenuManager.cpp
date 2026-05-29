@@ -62,6 +62,7 @@ void RebuildMenu(HWND hWnd)
 
     HMENU hFileMenu = CreatePopupMenu();
     AppendMenuW(hFileMenu, MF_STRING, ID_MENU_OPEN, LanguageManager::GetInstance().GetString(L"menu_open", L"打开 PDB 文件(&O)...").c_str());
+    AppendMenuW(hFileMenu, MF_STRING, ID_MENU_OPEN_DLL, LanguageManager::GetInstance().GetString(L"menu_open_dll", L"打开 DLL/EXE 文件(&D)...").c_str());
     AppendMenuW(hFileMenu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(hFileMenu, MF_STRING, ID_MENU_EXPORT_CSV, LanguageManager::GetInstance().GetString(L"menu_export_csv", L"导出全部为 CSV(&C)...").c_str());
     AppendMenuW(hFileMenu, MF_STRING, ID_MENU_EXPORT_FUNCTIONS_CSV, LanguageManager::GetInstance().GetString(L"menu_export_functions_csv", L"导出函数为 CSV(&F)...").c_str());

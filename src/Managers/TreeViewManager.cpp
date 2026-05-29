@@ -3,6 +3,7 @@
 #include "ListViewManager.h"
 #include "HeaderViewManager.h"
 #include "LanguageManager.h"
+#include "PDBDownloader.h"
 
 
 void PopulateTreeView()
@@ -131,6 +132,63 @@ void ClosePDBFile(HWND hWnd)
     SetWindowTextW(hRichEdit, L"");
 
     UpdateStatusBar(LanguageManager::GetInstance().GetString(L"status_ready", L"就绪 - 请打开一个 PDB 文件"));
+}
+
+void OpenDllFile(HWND hWnd) {
+    OPENFILENAMEW ofn;
+    WCHAR szFile[MAX_PATH] = L"";
+    WCHAR filterBuffer[] = L"DLL/EXE Files (*.dll;*.exe)\0*.dll;*.exe\0All Files (*.*)\0*.*\0";
+
+    ZeroMemory(&ofn, sizeof(ofn));
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = hWnd;
+    ofn.lpstrFilter = filterBuffer;
+    ofn.lpstrFile = szFile;
+    ofn.nMaxFile = MAX_PATH;
+    ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
+
+    if (GetOpenFileNameW(&ofn)) {
+        UpdateStatusBar(LanguageManager::GetInstance().GetString(L"status_downloading_pdb", L"正在从微软服务器下载 PDB 文件..."));
+        
+        PDBDownloadResult result = PDBDownloader::GetInstance().DownloadPDBForDll(ofn.lpstrFile);
+        
+        if (result.success) {
+            std::wstring pdbPath = result.pdbPath;
+            
+            if (g_parser.LoadPDB(pdbPath)) {
+                g_parser.SetProgressCallback([](int progress, const std::wstring& text) {
+                    std::wstring status = LanguageManager::GetInstance().GetString(L"status_parsing", L"解析中: ") + text + L" (" + std::to_wstring(progress) + L"%)";
+                    UpdateStatusBar(status);
+                });
+                g_moduleInfo = g_parser.ParseModule();
+                g_moduleInfo.pdbFileName = pdbPath;
+                g_pdbLoaded = true;
+
+                PopulateTreeView();
+
+                std::wstringstream ss;
+                ss << LanguageManager::GetInstance().GetString(L"status_loaded", L"已加载: ") << pdbPath
+                   << L" | " << LanguageManager::GetInstance().GetString(L"tree_functions", L"函数: ") << g_moduleInfo.functions.size()
+                   << L" | " << LanguageManager::GetInstance().GetString(L"tree_classes", L"类: ") << g_moduleInfo.classes.size()
+                   << L" | " << LanguageManager::GetInstance().GetString(L"tree_structs", L"结构体: ") << g_moduleInfo.structs.size()
+                   << L" | " << LanguageManager::GetInstance().GetString(L"tree_unions", L"联合体: ") << g_moduleInfo.unions.size()
+                   << L" | " << LanguageManager::GetInstance().GetString(L"tree_enums", L"枚举: ") << g_moduleInfo.enums.size();
+                UpdateStatusBar(ss.str());
+            }
+            else {
+                std::wstring errorMsg = LanguageManager::GetInstance().GetString(L"msg_pdb_load_fail", L"无法加载 PDB 文件: ") + g_parser.GetLastError();
+                MessageBoxW(hWnd, errorMsg.c_str(), 
+                           LanguageManager::GetInstance().GetString(L"msg_error", L"错误").c_str(), MB_OK | MB_ICONERROR);
+                UpdateStatusBar(L"加载失败");
+            }
+        }
+        else {
+            std::wstring errorMsg = LanguageManager::GetInstance().GetString(L"msg_pdb_download_fail", L"PDB 文件下载失败: ") + result.errorMessage;
+            MessageBoxW(hWnd, errorMsg.c_str(), 
+                       LanguageManager::GetInstance().GetString(L"msg_error", L"错误").c_str(), MB_OK | MB_ICONERROR);
+            UpdateStatusBar(result.errorMessage);
+        }
+    }
 }
 
 void RefreshCurrentSelection()

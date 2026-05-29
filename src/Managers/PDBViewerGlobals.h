@@ -60,6 +60,10 @@
 #define ID_MENU_OPEN 2001
 #endif
 
+#ifndef ID_MENU_OPEN_DLL
+#define ID_MENU_OPEN_DLL 2011
+#endif
+
 #ifndef ID_MENU_EXPORT_CSV
 #define ID_MENU_EXPORT_CSV 2002
 #endif
@@ -141,15 +145,15 @@
 #endif
 
 #ifndef ID_NUMBER_HEX
-#define ID_NUMBER_HEX 3001
+#define ID_NUMBER_HEX 3101
 #endif
 
 #ifndef ID_NUMBER_DEC
-#define ID_NUMBER_DEC 3002
+#define ID_NUMBER_DEC 3102
 #endif
 
 #ifndef ID_NUMBER_BOTH
-#define ID_NUMBER_BOTH 3003
+#define ID_NUMBER_BOTH 3103
 #endif
 
 #ifndef ID_MENU_SETTINGS

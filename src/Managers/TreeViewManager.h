@@ -5,6 +5,6 @@
 void PopulateTreeView();
 HTREEITEM AddTreeItem(HTREEITEM hParent, const std::wstring& text, LPARAM lParam);
 void OpenPDBFile(HWND hWnd);
-
+void OpenDllFile(HWND hWnd);
 void ClosePDBFile(HWND hWnd);
 void RefreshCurrentSelection();
