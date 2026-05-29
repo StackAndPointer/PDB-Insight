@@ -2,7 +2,8 @@
     "app_title": "PDB Insight",
     "menu_file": "文件(&F)",
     "menu_open": "打开 PDB 文件(&O)...",
-    "menu_open_cache": "打开 PDB 缓存文件(&C)...",
+    "menu_open_dll": "打开 DLL/EXE 文件(&D)...",
+    "menu_download_pdb": "下载 PDB 文件(&P)...",
     "menu_export_csv": "导出全部为 CSV(&C)...",
     "menu_export_functions_csv": "导出函数为 CSV(&F)...",
     "menu_export_classes_csv": "导出类为 CSV(&L)...",
@@ -35,8 +36,8 @@
     "status_loading": "正在加载 PDB 文件...",
     "status_parsing": "解析中",
     "status_loaded": "已加载",
-    "status_loading_cache": "正在加载缓存文件...",
-    "status_loaded_cache": "已从缓存加载",
+    "status_downloading_pdb": "正在从微软服务器下载 PDB 文件...",
+    "status_pdb_downloaded": "PDB 文件下载成功",
     "status_associate_success": "PDB 文件关联成功！",
     "status_unassociate_success": "已取消 PDB 文件关联！",
     "status_cannot_create_file": "无法创建文件",
@@ -97,7 +98,7 @@
     "msg_export_fail": "导出失败!",
     "msg_export_partial": "部分文件导出失败!",
     "msg_pdb_load_fail": "无法加载 PDB 文件",
-    "msg_cache_load_fail": "无法加载缓存文件",
+    "msg_pdb_download_fail": "PDB 文件下载失败",
     "msg_error": "错误",
     "msg_success": "成功",
     "msg_warning": "警告",
@@ -106,6 +107,7 @@
     "msg_lang_switch_en": "Language switched to English, please restart the application to apply changes",
     
     "filter_pdb": "PDB 文件 (*.pdb)",
+    "filter_dll": "DLL/EXE 文件 (*.dll;*.exe)",
     "filter_all": "所有文件 (*.*)",
     "filter_csv": "CSV 文件 (*.csv)",
     "filter_xml": "XML 文件 (*.xml)",
@@ -133,7 +135,7 @@
     "comment_class": "// Class: ",
     "comment_member_count": "// Member count: ",
     "comment_base_classes": "// Base classes: ",
-
+    
     "menu_settings": "导出头文件设置(&S)",
     "dlg_settings_title": "导出头文件功能设置",
     
@@ -146,7 +148,7 @@
     "encoding_ansi": "ANSI",
     
     "group_indent_style": "缩进风格",
-    "indent_kr": "K&amp;R",
+    "indent_kr": "K&R",
     "indent_allman": "Allman",
     "indent_gnu": "GNU",
     

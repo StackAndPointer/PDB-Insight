@@ -10,10 +10,12 @@
 #include "DragDropManager.h"
 #include "DPIManager.h"
 #include "SettingsManager.h"
-
+#include "CommandLineManager.h"
+#include "PDBDownloader.h"
 
 #pragma comment(lib, "comctl32.lib")
 #pragma comment(lib, "shell32.lib")
+#pragma comment(lib, "wininet.lib")
 
 ATOM MyRegisterClass(HINSTANCE hInstance)
 {
@@ -81,6 +83,14 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow, LPWSTR lpCmdLine)
 {
     hInst = hInstance;
 
+    CommandLineManager::GetInstance().ParseCommandLine(lpCmdLine);
+    const CommandLineOptions& cmdOptions = CommandLineManager::GetInstance().GetOptions();
+
+    if (cmdOptions.showHelp) {
+        CommandLineManager::GetInstance().ShowHelp();
+        return FALSE;
+    }
+
     if (!LoadLibraryW(L"riched20.dll")) {
         MessageBoxW(NULL, L"Failed to load riched20.dll!", L"Error", MB_OK | MB_ICONERROR);
         return FALSE;
@@ -128,52 +138,55 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow, LPWSTR lpCmdLine)
     UpdateWindow(hWnd);
 
     DragDropManager::Initialize(hWnd);
-    
-    AutoAssociatePDBFiles();
 
-    if (lpCmdLine && wcslen(lpCmdLine) > 0)
-    {
-        std::wstring filePath = lpCmdLine;
-        if (filePath[0] == L'"')
-        {
-            filePath = filePath.substr(1, filePath.find(L'"', 1) - 1);
+    std::wstring pdbToLoad;
+
+    if (CommandLineManager::GetInstance().ShouldAutoDownloadPdb()) {
+        UpdateStatusBar(LANG_STR(L"status_downloading_pdb"));
+        
+        PDBDownloadResult result = PDBDownloader::GetInstance().DownloadPDBForDll(cmdOptions.dllPath);
+        
+        if (result.success) {
+            pdbToLoad = result.pdbPath;
+            std::wstringstream ss;
+            ss << LANG_STR(L"status_pdb_downloaded") << L": " << result.pdbPath;
+            UpdateStatusBar(ss.str());
         }
-        if (!filePath.empty())
-        {
-            size_t dotPos = filePath.find_last_of(L'.');
-            if (dotPos != std::wstring::npos)
-            {
-                std::wstring extension = filePath.substr(dotPos);
-                for (size_t i = 0; i < extension.length(); i++)
-                {
-                    extension[i] = towlower(extension[i]);
-                }
-                
-                if (extension == L".pdb")
-                {
-                    if (g_parser.LoadPDB(filePath))
-                    {
-                        g_parser.SetProgressCallback([](int progress, const std::wstring& text) {
-                            std::wstring status = L"解析中: " + text + L" (" + std::to_wstring(progress) + L"%)";
-                            UpdateStatusBar(status);
-                            });
-                        g_moduleInfo = g_parser.ParseModule();
-                        g_moduleInfo.pdbFileName = filePath;
-                        g_pdbLoaded = true;
+        else {
+            std::wstringstream ss;
+            ss << LANG_STR(L"msg_pdb_download_fail") << L": " << result.errorMessage;
+            MessageBoxW(hWnd, ss.str().c_str(), LANG_STR(L"msg_error").c_str(), MB_OK | MB_ICONERROR);
+            UpdateStatusBar(result.errorMessage);
+        }
+    }
+    else if (CommandLineManager::GetInstance().HasValidPdbPath()) {
+        pdbToLoad = cmdOptions.pdbPath;
+    }
 
-                        PopulateTreeView();
+    if (!pdbToLoad.empty()) {
+        if (g_parser.LoadPDB(pdbToLoad)) {
+            g_parser.SetProgressCallback([](int progress, const std::wstring& text) {
+                std::wstring status = LANG_STR(L"status_parsing") + L": " + text + L" (" + std::to_wstring(progress) + L"%)";
+                UpdateStatusBar(status);
+            });
+            g_moduleInfo = g_parser.ParseModule();
+            g_moduleInfo.pdbFileName = pdbToLoad;
+            g_pdbLoaded = true;
 
-                        std::wstringstream ss;
-                        ss << L"已加载: " << filePath
-                            << L" | 函数: " << g_moduleInfo.functions.size()
-                            << L" | 类: " << g_moduleInfo.classes.size()
-                            << L" | 结构体: " << g_moduleInfo.structs.size()
-                            << L" | 联合体: " << g_moduleInfo.unions.size();
-                        UpdateStatusBar(ss.str());
-                    }
-                }
+            PopulateTreeView();
 
-            }
+            std::wstringstream ss;
+            ss << LANG_STR(L"status_loaded") << L": " << pdbToLoad
+                << L" | " << LANG_STR(L"tree_functions") << L": " << g_moduleInfo.functions.size()
+                << L" | " << LANG_STR(L"tree_classes") << L": " << g_moduleInfo.classes.size()
+                << L" | " << LANG_STR(L"tree_structs") << L": " << g_moduleInfo.structs.size()
+                << L" | " << LANG_STR(L"tree_unions") << L": " << g_moduleInfo.unions.size();
+            UpdateStatusBar(ss.str());
+        }
+        else {
+            std::wstringstream ss;
+            ss << LANG_STR(L"msg_pdb_load_fail") << L": " << pdbToLoad;
+            MessageBoxW(hWnd, ss.str().c_str(), LANG_STR(L"msg_error").c_str(), MB_OK | MB_ICONERROR);
         }
     }
 

@@ -2,7 +2,8 @@
     "app_title": "PDB Insight",
     "menu_file": "File(&F)",
     "menu_open": "Open PDB File(&O)...",
-    "menu_open_cache": "Open PDB Cache File(&C)...",
+    "menu_open_dll": "Open DLL/EXE File(&D)...",
+    "menu_download_pdb": "Download PDB File(&P)...",
     "menu_export_csv": "Export All as CSV(&C)...",
     "menu_export_functions_csv": "Export Functions as CSV(&F)...",
     "menu_export_classes_csv": "Export Classes as CSV(&L)...",
@@ -35,8 +36,8 @@
     "status_loading": "Loading PDB file...",
     "status_parsing": "Parsing",
     "status_loaded": "Loaded",
-    "status_loading_cache": "Loading cache file...",
-    "status_loaded_cache": "Loaded from cache",
+    "status_downloading_pdb": "Downloading PDB file from Microsoft server...",
+    "status_pdb_downloaded": "PDB file downloaded successfully",
     "status_associate_success": "PDB files associated successfully!",
     "status_unassociate_success": "PDB files unassociated!",
     "status_cannot_create_file": "Cannot create file",
@@ -97,7 +98,7 @@
     "msg_export_fail": "Export failed!",
     "msg_export_partial": "Some files failed to export!",
     "msg_pdb_load_fail": "Failed to load PDB file",
-    "msg_cache_load_fail": "Failed to load cache file",
+    "msg_pdb_download_fail": "Failed to download PDB file",
     "msg_error": "Error",
     "msg_success": "Success",
     "msg_warning": "Warning",
@@ -106,6 +107,7 @@
     "msg_lang_switch_en": "Language switched to English, please restart the application to apply changes",
     
     "filter_pdb": "PDB Files (*.pdb)",
+    "filter_dll": "DLL/EXE Files (*.dll;*.exe)",
     "filter_all": "All Files (*.*)",
     "filter_csv": "CSV Files (*.csv)",
     "filter_xml": "XML Files (*.xml)",
@@ -133,7 +135,7 @@
     "comment_class": "// Class: ",
     "comment_member_count": "// Member count: ",
     "comment_base_classes": "// Base classes: ",
-
+    
     "menu_settings": "Export Header Settings(&S)",
     "dlg_settings_title": "Export Header Function Settings",
     
@@ -146,7 +148,7 @@
     "encoding_ansi": "ANSI",
     
     "group_indent_style": "Indent Style",
-    "indent_kr": "K&amp;R",
+    "indent_kr": "K&R",
     "indent_allman": "Allman",
     "indent_gnu": "GNU",
     

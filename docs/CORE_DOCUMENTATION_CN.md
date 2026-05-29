@@ -458,6 +458,70 @@ PopulateTreeView()
 6. 使用顶部搜索框搜索符号
 7. 右键点击树形视图、详细表格或头文件视图访问附加功能
 
+### 命令行参数
+
+PDB Insight 支持以下命令行参数：
+
+```
+PDBInsight.exe [选项] [文件]
+```
+
+**选项**:
+| 参数 | 说明 |
+|------|------|
+| `-h, --help, /?` | 显示帮助信息 |
+| `-q, --quiet` | 安静模式（无UI，用于批处理） |
+| `-d, --download-pdb` | 自动下载DLL/EXE对应的PDB文件 |
+| `-e, --export <格式>` | 导出格式：csv, xml, header |
+| `-o, --output <路径>` | 输出文件/目录路径 |
+
+**文件**:
+| 类型 | 说明 |
+|------|------|
+| `<pdb文件>` | 直接打开PDB文件 |
+| `<dll/exe文件>` | 打开DLL/EXE文件，自动下载对应PDB |
+
+**示例**:
+```bash
+# 直接打开PDB文件
+PDBInsight.exe mylib.pdb
+
+# 打开DLL并自动下载PDB
+PDBInsight.exe -d kernel32.dll
+
+# 导出为CSV格式
+PDBInsight.exe -e csv -o output.csv mylib.pdb
+
+# 显示帮助
+PDBInsight.exe --help
+```
+
+### DLL/EXE自动下载PDB功能
+
+PDB Insight 支持直接打开Windows系统DLL或EXE文件，自动从微软符号服务器下载对应的PDB文件：
+
+1. **工作原理**:
+   - 读取DLL/EXE文件的PE调试信息
+   - 获取PDB文件名、GUID和Age
+   - 构建微软符号服务器URL
+   - 下载PDB文件到DLL所在目录
+   - 自动打开下载的PDB文件
+
+2. **使用方式**:
+   - 命令行：`PDBInsight.exe -d kernel32.dll`
+   - 直接拖放DLL文件到程序窗口
+   - 菜单：文件 → 打开DLL/EXE文件
+
+3. **支持的文件类型**:
+   - Windows系统DLL（如kernel32.dll, ntdll.dll）
+   - Windows系统EXE文件
+   - 第三方DLL/EXE（需要有调试信息）
+
+4. **注意事项**:
+   - 需要网络连接访问微软符号服务器
+   - PDB文件下载到DLL/EXE所在目录
+   - 文件必须包含调试信息（Debug Directory）
+
 ### 键盘快捷键
 
 | 快捷键 | 功能 |

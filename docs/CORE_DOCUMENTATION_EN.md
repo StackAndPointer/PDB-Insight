@@ -458,6 +458,82 @@ Check Current Tab
 6. Use the top search box to search for symbols
 7. Right-click on tree view, details table, or header view for additional functions
 
+### Command Line Parameters
+
+PDB Insight supports the following command line parameters:
+
+```
+PDBInsight.exe [options] [file]
+```
+
+**Options**:
+| Parameter | Description |
+|-----------|-------------|
+| `-h, --help, /?` | Show help message |
+| `-q, --quiet` | Quiet mode (no UI, for batch processing) |
+| `-d, --download-pdb` | Auto-download PDB for DLL/EXE files |
+| `-e, --export <format>` | Export format: csv, xml, header, allheaders |
+| `-o, --output <path>` | Output file/directory path |
+| `-c, --class <name>` | Export specific class/struct |
+| `-a, --all` | Export all classes/structs |
+| `-l, --list` | List all classes in PDB |
+
+**File**:
+| Type | Description |
+|------|-------------|
+| `<pdb_file>` | Open PDB file directly |
+| `<dll/exe_file>` | Open DLL/EXE file, auto-download corresponding PDB |
+
+**Examples**:
+```bash
+# Open PDB file directly
+PDBInsight.exe mylib.pdb
+
+# Open DLL and auto-download PDB
+PDBInsight.exe -d kernel32.dll
+
+# Export to CSV format
+PDBInsight.exe -e csv -o output.csv mylib.pdb
+
+# Export specific class header
+PDBInsight.exe -e header -c MyClass -o MyClass.h mylib.pdb
+
+# Export all class headers to directory
+PDBInsight.exe -e allheaders -o ./headers mylib.pdb
+
+# List all classes in PDB
+PDBInsight.exe -l mylib.pdb
+
+# Show help
+PDBInsight.exe --help
+```
+
+### DLL/EXE Auto-Download PDB Feature
+
+PDB Insight supports directly opening Windows system DLL or EXE files, automatically downloading the corresponding PDB file from Microsoft symbol server:
+
+1. **How it works**:
+   - Read PE debug information from DLL/EXE file
+   - Get PDB file name, GUID and Age
+   - Build Microsoft symbol server URL
+   - Download PDB file to DLL directory
+   - Automatically open the downloaded PDB file
+
+2. **Usage**:
+   - Command line: `PDBInsight.exe -d kernel32.dll`
+   - Drag and drop DLL file to program window
+   - Menu: File → Open DLL/EXE File
+
+3. **Supported file types**:
+   - Windows system DLLs (e.g., kernel32.dll, ntdll.dll)
+   - Windows system EXE files
+   - Third-party DLL/EXE (must have debug information)
+
+4. **Notes**:
+   - Requires network connection to access Microsoft symbol server
+   - PDB file is downloaded to DLL/EXE directory
+   - File must contain debug information (Debug Directory)
+
 ### Keyboard Shortcuts
 
 | Shortcut | Function |
