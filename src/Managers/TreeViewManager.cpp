@@ -178,11 +178,6 @@ void OpenPDBFile(HWND hWnd) {
             g_parser.SetProgressCallback([](int progress, const std::wstring& text) {
                 std::wstring status = LanguageManager::GetInstance().GetString(L"status_parsing", L"解析中: ") + text + L" (" + std::to_wstring(progress) + L"%)";
                 UpdateStatusBar(status);
-                MSG msg;
-                while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
-                    TranslateMessage(&msg);
-                    DispatchMessage(&msg);
-                }
             });
             g_moduleInfo = g_parser.ParseModule();
             g_moduleInfo.pdbFileName = ofn.lpstrFile;
@@ -249,11 +244,6 @@ void OpenDllFile(HWND hWnd) {
         
         PDBDownloadResult result = PDBDownloader::GetInstance().DownloadPDBForDll(ofn.lpstrFile, L"", [](int progress, const std::wstring& text) {
             UpdateStatusBar(text);
-            MSG msg;
-            while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
-                TranslateMessage(&msg);
-                DispatchMessage(&msg);
-            }
         });
         
         if (result.success) {
@@ -263,11 +253,6 @@ void OpenDllFile(HWND hWnd) {
                 g_parser.SetProgressCallback([](int progress, const std::wstring& text) {
                     std::wstring status = LanguageManager::GetInstance().GetString(L"status_parsing", L"解析中: ") + text + L" (" + std::to_wstring(progress) + L"%)";
                     UpdateStatusBar(status);
-                    MSG msg;
-                    while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
-                        TranslateMessage(&msg);
-                        DispatchMessage(&msg);
-                    }
                 });
                 g_moduleInfo = g_parser.ParseModule();
                 g_moduleInfo.pdbFileName = pdbPath;
