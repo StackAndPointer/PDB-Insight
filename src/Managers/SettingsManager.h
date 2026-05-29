@@ -35,6 +35,8 @@ private:
     
     HWND m_hGroupDownloadOptions;
     HWND m_hCheckUseMirrorSource;
+    HWND m_hEditMirrorUrl;
+    HWND m_hLabelMirrorUrl;
     
     HWND m_hButtonOK;
     HWND m_hButtonCancel;

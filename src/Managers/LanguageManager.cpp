@@ -15,7 +15,7 @@ std::wstring LanguageManager::GetLanguageFilePath(const std::wstring& languageCo
     PathRemoveFileSpecW(modulePath);
     
     std::wstring filePath = modulePath;
-    filePath += L"\\" + languageCode + L".json";
+    filePath += L"\\i18n\\" + languageCode + L".json";
     return filePath;
 }
 

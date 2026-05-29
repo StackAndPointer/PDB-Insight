@@ -34,6 +34,9 @@ public:
     bool GetUseMirrorSource() const { return m_useMirrorSource; }
     void SetUseMirrorSource(bool use) { m_useMirrorSource = use; }
 
+    std::wstring GetMirrorSourceUrl() const { return m_mirrorSourceUrl; }
+    void SetMirrorSourceUrl(const std::wstring& url) { m_mirrorSourceUrl = url; }
+
     const std::vector<std::wstring>& GetSearchHistory() const { return m_searchHistory; }
     void AddSearchHistory(const std::wstring& text);
     void ClearSearchHistory();
@@ -50,6 +53,7 @@ private:
     NumberDisplayMode m_numberMode;
     bool m_expandBaseClasses;
     bool m_useMirrorSource;
+    std::wstring m_mirrorSourceUrl;
     ExportSettings m_exportSettings;
     std::vector<std::wstring> m_searchHistory;
     static const size_t MAX_SEARCH_HISTORY = 20;

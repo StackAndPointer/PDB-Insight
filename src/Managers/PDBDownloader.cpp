@@ -68,7 +68,15 @@ std::wstring PDBDownloader::BuildMicrosoftSymbolUrl(const std::wstring& pdbName,
     
     std::wstring baseUrl;
     if (ConfigManager::GetInstance().GetUseMirrorSource()) {
-        baseUrl = L"https://symbols.yandex.ru/";
+        std::wstring customUrl = ConfigManager::GetInstance().GetMirrorSourceUrl();
+        if (!customUrl.empty()) {
+            baseUrl = customUrl;
+            if (baseUrl.back() != L'/') {
+                baseUrl += L'/';
+            }
+        } else {
+            baseUrl = L"https://symbols.yandex.ru/";
+        }
     } else {
         baseUrl = L"https://msdl.microsoft.com/download/symbols/";
     }

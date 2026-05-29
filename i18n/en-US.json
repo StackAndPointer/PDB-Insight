@@ -24,6 +24,7 @@
     "menu_lang_zh_cn": "中文(简体)(&C)",
     "menu_lang_en_us": "English(&E)",
     "menu_tools": "Tools(&T)",
+    "menu_settings": "Settings(&S)",
     "menu_associate_pdb": "Associate PDB Files(&A)",
     "menu_unassociate_pdb": "Unassociate PDB Files(&U)",
     
@@ -36,7 +37,7 @@
     "status_loading": "Loading PDB file...",
     "status_parsing": "Parsing",
     "status_loaded": "Loaded",
-    "status_downloading_pdb": "Downloading PDB file from Microsoft server...",
+    "status_downloading_pdb": "Downloading PDB file...",
     "status_pdb_downloaded": "PDB file downloaded successfully",
     "status_associate_success": "PDB files associated successfully!",
     "status_unassociate_success": "PDB files unassociated!",
@@ -136,8 +137,7 @@
     "comment_member_count": "// Member count: ",
     "comment_base_classes": "// Base classes: ",
     
-    "menu_settings": "Export Header Settings(&S)",
-    "dlg_settings_title": "Export Header Function Settings",
+    "dlg_settings_title": "Settings",
     
     "group_export_format": "Export Format",
     "format_c_header": "C/C++ Header",
@@ -152,7 +152,7 @@
     "indent_allman": "Allman",
     "indent_gnu": "GNU",
     
-    "group_enhanced_options": "Enhanced Options",
+    "group_enhanced_options": "Export Enhanced Options",
     "opt_flatten_namespaces": "Flatten Namespaces",
     "opt_remove_void_params": "Remove Void Params",
     "opt_include_enums_in_enumsh": "Include Enums in Enums.h",
@@ -162,6 +162,11 @@
     
     "group_ida_compatibility": "IDA Compatibility",
     "opt_ida_compatible": "IDA Compatible Format(Pure C Struct)",
+    
+    "group_download_options": "Download Options",
+    "opt_use_mirror_source": "Use Mirror Source for Faster Download",
+    "opt_custom_mirror_url": "Custom Mirror URL",
+    "opt_mirror_url_hint": "Example: https://symbols.yandex.ru/",
     
     "button_ok": "OK",
     "button_cancel": "Cancel",
