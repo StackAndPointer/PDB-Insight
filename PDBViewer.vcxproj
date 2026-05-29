@@ -141,6 +141,7 @@
     <ClInclude Include="src\Core\MainWindow.h" />
     <ClInclude Include="src\Core\PDBViewer.h" />
     <ClInclude Include="targetver.h" />
+    <ClInclude Include="src\Managers\AppState.h" />
     <ClInclude Include="src\Managers\ConfigManager.h" />
     <ClInclude Include="src\Managers\CommandLineManager.h" />
     <ClInclude Include="src\Managers\ControlsManager.h" />
@@ -157,9 +158,11 @@
     <ClInclude Include="src\Managers\MenuManager.h" />
     <ClInclude Include="src\Managers\PDBDownloader.h" />
     <ClInclude Include="src\Managers\PDBViewerGlobals.h" />
+    <ClInclude Include="src\Managers\ProgressCallback.h" />
     <ClInclude Include="src\Managers\SearchManager.h" />
     <ClInclude Include="src\Managers\SearchOptimizer.h" />
     <ClInclude Include="src\Managers\SettingsManager.h" />
+    <ClInclude Include="src\Managers\TreeNodeHelper.h" />
     <ClInclude Include="src\Managers\TreeViewManager.h" />
     <ClInclude Include="src\PDB\cvConst.h" />
     <ClInclude Include="src\PDB\dia2.h" />
@@ -173,6 +176,7 @@
   <ItemGroup>
     <ClCompile Include="src\Core\MainWindow.cpp" />
     <ClCompile Include="src\Core\PDBViewer.cpp" />
+    <ClCompile Include="src\Managers\AppState.cpp" />
     <ClCompile Include="src\Managers\ConfigManager.cpp" />
     <ClCompile Include="src\Managers\CommandLineManager.cpp" />
     <ClCompile Include="src\Managers\ControlsManager.cpp" />
@@ -192,6 +196,7 @@
     <ClCompile Include="src\Managers\SearchManager.cpp" />
     <ClCompile Include="src\Managers\SearchOptimizer.cpp" />
     <ClCompile Include="src\Managers\SettingsManager.cpp" />
+    <ClCompile Include="src\Managers\TreeNodeHelper.cpp" />
     <ClCompile Include="src\Managers\TreeViewManager.cpp" />
     <ClCompile Include="src\PDB\diaCreate.cpp" />
     <ClCompile Include="src\PDB\PDBExporter.cpp" />

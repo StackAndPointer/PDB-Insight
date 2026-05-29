@@ -1,5 +1,6 @@
 #include "HeaderViewManager.h"
 #include "FontManager.h"
+#include "TreeNodeHelper.h"
 #include <set>
 
 void ShowHeaderView(HTREEITEM hItem)
@@ -128,9 +129,9 @@ void ShowHeaderView(HTREEITEM hItem)
         ss << L"// Total Size: " << totalSize << L" bytes\r\n";
         content = ss.str();
     }
-    else if (param >= 10000 && param < 20000)
+    else if (TreeNodeParamHelper::IsFunctionNode(param))
     {
-        size_t idx = param - 10000;
+        size_t idx = TreeNodeParamHelper::GetIndex(param);
         if (idx < g_moduleInfo.functions.size())
         {
             const auto& func = g_moduleInfo.functions[idx];
@@ -168,29 +169,29 @@ void ShowHeaderView(HTREEITEM hItem)
             content = ss.str();
         }
     }
-    else if (param >= 20000 && param < 50000)
+    else if (TreeNodeParamHelper::IsClassNode(param) || TreeNodeParamHelper::IsStructNode(param) || TreeNodeParamHelper::IsUnionNode(param))
     {
         const ClassInfo* pClass = nullptr;
         
-        if (param >= 20000 && param < 30000)
+        if (TreeNodeParamHelper::IsClassNode(param))
         {
-            size_t idx = param - 20000;
+            size_t idx = TreeNodeParamHelper::GetIndex(param);
             if (idx < g_moduleInfo.classes.size())
             {
                 pClass = &g_moduleInfo.classes[idx];
             }
         }
-        else if (param >= 30000 && param < 40000)
+        else if (TreeNodeParamHelper::IsStructNode(param))
         {
-            size_t idx = param - 30000;
+            size_t idx = TreeNodeParamHelper::GetIndex(param);
             if (idx < g_moduleInfo.structs.size())
             {
                 pClass = &g_moduleInfo.structs[idx];
             }
         }
-        else if (param >= 40000 && param < 50000)
+        else if (TreeNodeParamHelper::IsUnionNode(param))
         {
-            size_t idx = param - 40000;
+            size_t idx = TreeNodeParamHelper::GetIndex(param);
             if (idx < g_moduleInfo.unions.size())
             {
                 pClass = &g_moduleInfo.unions[idx];
@@ -258,9 +259,9 @@ void ShowHeaderView(HTREEITEM hItem)
             content = ss.str();
         }
     }
-    else if (param >= 50000 && param < 60000)
+    else if (TreeNodeParamHelper::IsEnumNode(param))
     {
-        size_t idx = param - 50000;
+        size_t idx = TreeNodeParamHelper::GetIndex(param);
         if (idx < g_moduleInfo.enums.size())
         {
             const auto& enm = g_moduleInfo.enums[idx];
@@ -273,9 +274,9 @@ void ShowHeaderView(HTREEITEM hItem)
             content = ss.str();
         }
     }
-    else if (param >= 60000 && param < 70000)
+    else if (TreeNodeParamHelper::IsGlobalVarNode(param))
     {
-        size_t idx = param - 60000;
+        size_t idx = TreeNodeParamHelper::GetIndex(param);
         if (idx < g_moduleInfo.globalVariables.size())
         {
             const auto& var = g_moduleInfo.globalVariables[idx];

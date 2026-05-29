@@ -1,6 +1,7 @@
 #include "SearchManager.h"
 #include "TreeViewManager.h"
 #include "LanguageManager.h"
+#include "TreeNodeHelper.h"
 
 void SearchItems(const std::wstring& text, bool addToHistory)
 {
@@ -37,7 +38,7 @@ void SearchItems(const std::wstring& text, bool addToHistory)
             {
                 hFunctions = AddTreeItem(hRoot, LanguageManager::GetInstance().GetString(L"tree_functions", L"函数"), 1);
             }
-            AddTreeItem(hFunctions, funcName, 10000 + (DWORD)i);
+            AddTreeItem(hFunctions, funcName, TreeNodeParamHelper::MakeParam(TreeNodeType::FunctionItem, i));
         }
     }
 
@@ -53,7 +54,7 @@ void SearchItems(const std::wstring& text, bool addToHistory)
             {
                 hClasses = AddTreeItem(hRoot, LanguageManager::GetInstance().GetString(L"tree_classes", L"类"), 2);
             }
-            AddTreeItem(hClasses, g_moduleInfo.classes[i].name, 20000 + (DWORD)i);
+            AddTreeItem(hClasses, g_moduleInfo.classes[i].name, TreeNodeParamHelper::MakeParam(TreeNodeType::ClassItem, i));
         }
     }
 
@@ -69,7 +70,7 @@ void SearchItems(const std::wstring& text, bool addToHistory)
             {
                 hStructs = AddTreeItem(hRoot, LanguageManager::GetInstance().GetString(L"tree_structs", L"结构体"), 3);
             }
-            AddTreeItem(hStructs, g_moduleInfo.structs[i].name, 30000 + (DWORD)i);
+            AddTreeItem(hStructs, g_moduleInfo.structs[i].name, TreeNodeParamHelper::MakeParam(TreeNodeType::StructItem, i));
         }
     }
 
@@ -85,7 +86,7 @@ void SearchItems(const std::wstring& text, bool addToHistory)
             {
                 hUnions = AddTreeItem(hRoot, LanguageManager::GetInstance().GetString(L"tree_unions", L"联合体"), 4);
             }
-            AddTreeItem(hUnions, g_moduleInfo.unions[i].name, 40000 + (DWORD)i);
+            AddTreeItem(hUnions, g_moduleInfo.unions[i].name, TreeNodeParamHelper::MakeParam(TreeNodeType::UnionItem, i));
         }
     }
 
@@ -117,7 +118,7 @@ void SearchItems(const std::wstring& text, bool addToHistory)
             {
                 hGlobalVars = AddTreeItem(hRoot, LanguageManager::GetInstance().GetString(L"tree_global_variables", L"全局变量"), 6);
             }
-            AddTreeItem(hGlobalVars, g_moduleInfo.globalVariables[i].name, 60000 + (DWORD)i);
+            AddTreeItem(hGlobalVars, g_moduleInfo.globalVariables[i].name, TreeNodeParamHelper::MakeParam(TreeNodeType::GlobalVarItem, i));
         }
     }
 

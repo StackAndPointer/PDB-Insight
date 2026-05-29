@@ -1,6 +1,7 @@
 #include "ListViewManager.h"
 #include "FunctionInfoDisplayManager.h"
 #include "LanguageManager.h"
+#include "TreeNodeHelper.h"
 
 void PopulateListView(HTREEITEM hItem)
 {
@@ -147,9 +148,9 @@ void PopulateListView(HTREEITEM hItem)
             ListView_SetItemText(hListView, (int)i, 4, (LPWSTR)ssSize.str().c_str());
         }
     }
-    else if (param >= 10000 && param < 20000)
+    else if (TreeNodeParamHelper::IsFunctionNode(param))
     {
-        size_t idx = param - 10000;
+        size_t idx = TreeNodeParamHelper::GetIndex(param);
         if (idx < g_moduleInfo.functions.size())
         {
             const auto& func = g_moduleInfo.functions[idx];
@@ -205,24 +206,24 @@ void PopulateListView(HTREEITEM hItem)
             addItem(LanguageManager::GetInstance().GetString(L"prop_virtual_functions", L"信息完整性"), FunctionInfoDisplayManager::FormatCompletenessLabel(displayInfo.completenessPercent));
         }
     }
-    else if (param >= 20000 && param < 50000)
+    else if (TreeNodeParamHelper::IsClassNode(param) || TreeNodeParamHelper::IsStructNode(param) || TreeNodeParamHelper::IsUnionNode(param))
     {
         size_t idx;
         const ClassInfo* pClass = nullptr;
         
-        if (param >= 20000 && param < 30000)
+        if (TreeNodeParamHelper::IsClassNode(param))
         {
-            idx = param - 20000;
+            idx = TreeNodeParamHelper::GetIndex(param);
             if (idx < g_moduleInfo.classes.size()) pClass = &g_moduleInfo.classes[idx];
         }
-        else if (param >= 30000 && param < 40000)
+        else if (TreeNodeParamHelper::IsStructNode(param))
         {
-            idx = param - 30000;
+            idx = TreeNodeParamHelper::GetIndex(param);
             if (idx < g_moduleInfo.structs.size()) pClass = &g_moduleInfo.structs[idx];
         }
-        else if (param >= 40000 && param < 50000)
+        else if (TreeNodeParamHelper::IsUnionNode(param))
         {
-            idx = param - 40000;
+            idx = TreeNodeParamHelper::GetIndex(param);
             if (idx < g_moduleInfo.unions.size()) pClass = &g_moduleInfo.unions[idx];
         }
 
@@ -365,9 +366,9 @@ void PopulateListView(HTREEITEM hItem)
             }
         }
     }
-    else if (param >= 50000 && param < 60000)
+    else if (TreeNodeParamHelper::IsEnumNode(param))
     {
-        size_t idx = param - 50000;
+        size_t idx = TreeNodeParamHelper::GetIndex(param);
         if (idx < g_moduleInfo.enums.size())
         {
             const auto& enm = g_moduleInfo.enums[idx];
@@ -400,9 +401,9 @@ void PopulateListView(HTREEITEM hItem)
             }
         }
     }
-    else if (param >= 60000 && param < 70000)
+    else if (TreeNodeParamHelper::IsGlobalVarNode(param))
     {
-        size_t idx = param - 60000;
+        size_t idx = TreeNodeParamHelper::GetIndex(param);
         if (idx < g_moduleInfo.globalVariables.size())
         {
             const auto& var = g_moduleInfo.globalVariables[idx];
