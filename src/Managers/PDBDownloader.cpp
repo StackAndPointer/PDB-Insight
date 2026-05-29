@@ -11,8 +11,12 @@ PDBDownloader& PDBDownloader::GetInstance() {
     return instance;
 }
 
-PDBDownloadResult PDBDownloader::DownloadPDBForDll(const std::wstring& dllPath, const std::wstring& outputPath) {
+PDBDownloadResult PDBDownloader::DownloadPDBForDll(const std::wstring& dllPath, const std::wstring& outputPath, std::function<void(int, const std::wstring&)> progressCallback) {
     PDBDownloadResult result;
+    
+    if (progressCallback) {
+        progressCallback(0, L"Reading debug info from DLL/EXE...");
+    }
     
     std::wstring pdbName;
     std::wstring guid;
@@ -21,6 +25,10 @@ PDBDownloadResult PDBDownloader::DownloadPDBForDll(const std::wstring& dllPath, 
     if (!ReadPeDebugInfo(dllPath, pdbName, guid, age)) {
         result.errorMessage = L"Failed to read debug info from DLL/EXE file";
         return result;
+    }
+    
+    if (progressCallback) {
+        progressCallback(10, L"Debug info found: " + pdbName);
     }
     
     result.pdbGuid = guid;
@@ -34,7 +42,11 @@ PDBDownloadResult PDBDownloader::DownloadPDBForDll(const std::wstring& dllPath, 
     
     std::wstring url = BuildMicrosoftSymbolUrl(pdbName, guid, age);
     
-    if (DownloadFile(url, targetPath)) {
+    if (progressCallback) {
+        progressCallback(20, L"Connecting to Microsoft symbol server...");
+    }
+    
+    if (DownloadFile(url, targetPath, progressCallback)) {
         result.success = true;
         result.pdbPath = targetPath;
     }
@@ -63,10 +75,14 @@ std::wstring PDBDownloader::BuildMicrosoftSymbolUrl(const std::wstring& pdbName,
     return url;
 }
 
-bool PDBDownloader::DownloadFile(const std::wstring& url, const std::wstring& localPath) {
+bool PDBDownloader::DownloadFile(const std::wstring& url, const std::wstring& localPath, std::function<void(int, const std::wstring&)> progressCallback) {
     HINTERNET hInternet = InternetOpenW(L"PDBInsight", INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
     if (!hInternet) {
         return false;
+    }
+    
+    if (progressCallback) {
+        progressCallback(25, L"Opening connection...");
     }
     
     HINTERNET hUrl = InternetOpenUrlW(hInternet, url.c_str(), NULL, 0, INTERNET_FLAG_RELOAD | INTERNET_FLAG_SECURE, 0);
@@ -74,6 +90,10 @@ bool PDBDownloader::DownloadFile(const std::wstring& url, const std::wstring& lo
         InternetCloseHandle(hInternet);
         return false;
     }
+    
+    DWORD contentLength = 0;
+    DWORD contentLengthSize = sizeof(contentLength);
+    BOOL hasContentLength = HttpQueryInfoW(hUrl, HTTP_QUERY_CONTENT_LENGTH | HTTP_QUERY_FLAG_NUMBER, &contentLength, &contentLengthSize, NULL);
     
     std::ofstream outFile(localPath, std::ios::binary);
     if (!outFile.is_open()) {
@@ -84,15 +104,37 @@ bool PDBDownloader::DownloadFile(const std::wstring& url, const std::wstring& lo
     
     char buffer[8192];
     DWORD bytesRead = 0;
+    DWORD totalBytesRead = 0;
     bool success = true;
     
     while (InternetReadFile(hUrl, buffer, sizeof(buffer), &bytesRead) && bytesRead > 0) {
         outFile.write(buffer, bytesRead);
+        totalBytesRead += bytesRead;
+        
+        if (progressCallback && hasContentLength && contentLength > 0) {
+            int percent = 30 + (int)((double)totalBytesRead / contentLength * 70);
+            std::wstring status = L"Downloading... " + std::to_wstring(percent) + L"% (" + std::to_wstring(totalBytesRead / 1024) + L" KB)";
+            progressCallback(percent, status);
+        }
+        else if (progressCallback) {
+            std::wstring status = L"Downloading... " + std::to_wstring(totalBytesRead / 1024) + L" KB";
+            progressCallback(50, status);
+        }
+        
+        MSG msg;
+        while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
+        }
     }
     
     outFile.close();
     InternetCloseHandle(hUrl);
     InternetCloseHandle(hInternet);
+    
+    if (progressCallback) {
+        progressCallback(100, L"Download complete");
+    }
     
     return outFile.good();
 }

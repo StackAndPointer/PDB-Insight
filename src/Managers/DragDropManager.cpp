@@ -70,7 +70,9 @@ void DragDropManager::HandleDropFiles(WPARAM wParam, HWND hWnd) {
             else if (extension == L".dll" || extension == L".exe") {
                 UpdateStatusBar(LanguageManager::GetInstance().GetString(L"status_downloading_pdb", L"正在从微软服务器下载 PDB 文件..."));
                 
-                PDBDownloadResult result = PDBDownloader::GetInstance().DownloadPDBForDll(filePath);
+                PDBDownloadResult result = PDBDownloader::GetInstance().DownloadPDBForDll(filePath, L"", [](int progress, const std::wstring& text) {
+                    UpdateStatusBar(text);
+                });
                 
                 if (result.success) {
                     std::wstring pdbPath = result.pdbPath;

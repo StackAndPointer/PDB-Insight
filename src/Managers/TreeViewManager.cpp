@@ -150,7 +150,9 @@ void OpenDllFile(HWND hWnd) {
     if (GetOpenFileNameW(&ofn)) {
         UpdateStatusBar(LanguageManager::GetInstance().GetString(L"status_downloading_pdb", L"正在从微软服务器下载 PDB 文件..."));
         
-        PDBDownloadResult result = PDBDownloader::GetInstance().DownloadPDBForDll(ofn.lpstrFile);
+        PDBDownloadResult result = PDBDownloader::GetInstance().DownloadPDBForDll(ofn.lpstrFile, L"", [](int progress, const std::wstring& text) {
+            UpdateStatusBar(text);
+        });
         
         if (result.success) {
             std::wstring pdbPath = result.pdbPath;

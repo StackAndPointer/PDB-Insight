@@ -2,6 +2,7 @@
 
 #include <windows.h>
 #include <string>
+#include <functional>
 
 struct PDBDownloadResult {
     bool success = false;
@@ -15,12 +16,12 @@ class PDBDownloader {
 public:
     static PDBDownloader& GetInstance();
 
-    PDBDownloadResult DownloadPDBForDll(const std::wstring& dllPath, const std::wstring& outputPath = L"");
+    PDBDownloadResult DownloadPDBForDll(const std::wstring& dllPath, const std::wstring& outputPath = L"", std::function<void(int, const std::wstring&)> progressCallback = nullptr);
     
     bool GetDebugInfoFromDll(const std::wstring& dllPath, std::wstring& guid, DWORD& age);
     std::wstring BuildMicrosoftSymbolUrl(const std::wstring& pdbName, const std::wstring& guid, DWORD age);
     
-    bool DownloadFile(const std::wstring& url, const std::wstring& localPath);
+    bool DownloadFile(const std::wstring& url, const std::wstring& localPath, std::function<void(int, const std::wstring&)> progressCallback = nullptr);
     
     std::wstring GetPdbFileNameFromDll(const std::wstring& dllPath);
     std::wstring GetDllDirectory(const std::wstring& dllPath);

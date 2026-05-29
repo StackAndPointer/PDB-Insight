@@ -144,7 +144,9 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow, LPWSTR lpCmdLine)
     if (CommandLineManager::GetInstance().ShouldAutoDownloadPdb()) {
         UpdateStatusBar(LANG_STR(L"status_downloading_pdb"));
         
-        PDBDownloadResult result = PDBDownloader::GetInstance().DownloadPDBForDll(cmdOptions.dllPath);
+        PDBDownloadResult result = PDBDownloader::GetInstance().DownloadPDBForDll(cmdOptions.dllPath, L"", [](int progress, const std::wstring& text) {
+            UpdateStatusBar(text);
+        });
         
         if (result.success) {
             pdbToLoad = result.pdbPath;
