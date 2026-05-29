@@ -13,9 +13,124 @@ void ShowHeaderView(HTREEITEM hItem)
     TreeView_GetItem(hTreeView, &tvi);
     DWORD param = (DWORD)tvi.lParam;
 
-    if (param >= 2000 && param < 3000)
+    if (param == 0)
     {
-        size_t idx = param - 2000;
+        std::wostringstream ss;
+        ss << L"// Module Information\r\n\r\n";
+        ss << L"// PDB File: " << g_moduleInfo.pdbFileName << L"\r\n";
+        if (!g_moduleInfo.name.empty())
+        {
+            ss << L"// Module Name: " << g_moduleInfo.name << L"\r\n";
+        }
+        ss << L"\r\n// Statistics:\r\n";
+        ss << L"// Functions: " << g_moduleInfo.functions.size() << L"\r\n";
+        ss << L"// Classes: " << g_moduleInfo.classes.size() << L"\r\n";
+        ss << L"// Structs: " << g_moduleInfo.structs.size() << L"\r\n";
+        ss << L"// Unions: " << g_moduleInfo.unions.size() << L"\r\n";
+        ss << L"// Enums: " << g_moduleInfo.enums.size() << L"\r\n";
+        ss << L"// Global Variables: " << g_moduleInfo.globalVariables.size() << L"\r\n";
+        content = ss.str();
+    }
+    else if (param == 1)
+    {
+        std::wostringstream ss;
+        ss << L"// Functions List\r\n\r\n";
+        ss << L"// Total Functions: " << g_moduleInfo.functions.size() << L"\r\n\r\n";
+        
+        size_t staticCount = 0, virtualCount = 0, memberCount = 0;
+        for (const auto& func : g_moduleInfo.functions)
+        {
+            if (func.isStatic) staticCount++;
+            if (func.isVirtual) virtualCount++;
+            if (func.isMemberFunction) memberCount++;
+        }
+        ss << L"// Static Functions: " << staticCount << L"\r\n";
+        ss << L"// Virtual Functions: " << virtualCount << L"\r\n";
+        ss << L"// Member Functions: " << memberCount << L"\r\n";
+        ss << L"// Global Functions: " << (g_moduleInfo.functions.size() - memberCount) << L"\r\n";
+        content = ss.str();
+    }
+    else if (param == 2)
+    {
+        std::wostringstream ss;
+        ss << L"// Classes List\r\n\r\n";
+        ss << L"// Total Classes: " << g_moduleInfo.classes.size() << L"\r\n\r\n";
+        
+        size_t totalMembers = 0, totalVirtuals = 0;
+        for (const auto& cls : g_moduleInfo.classes)
+        {
+            totalMembers += cls.members.size();
+            totalVirtuals += cls.virtualFunctions.size();
+        }
+        ss << L"// Total Members: " << totalMembers << L"\r\n";
+        ss << L"// Total Virtual Functions: " << totalVirtuals << L"\r\n";
+        content = ss.str();
+    }
+    else if (param == 3)
+    {
+        std::wostringstream ss;
+        ss << L"// Structs List\r\n\r\n";
+        ss << L"// Total Structs: " << g_moduleInfo.structs.size() << L"\r\n\r\n";
+        
+        size_t totalMembers = 0;
+        size_t totalSize = 0;
+        for (const auto& str : g_moduleInfo.structs)
+        {
+            totalMembers += str.members.size();
+            totalSize += str.size;
+        }
+        ss << L"// Total Members: " << totalMembers << L"\r\n";
+        ss << L"// Total Size: " << totalSize << L" bytes\r\n";
+        content = ss.str();
+    }
+    else if (param == 4)
+    {
+        std::wostringstream ss;
+        ss << L"// Unions List\r\n\r\n";
+        ss << L"// Total Unions: " << g_moduleInfo.unions.size() << L"\r\n\r\n";
+        
+        size_t totalMembers = 0;
+        size_t totalSize = 0;
+        for (const auto& uni : g_moduleInfo.unions)
+        {
+            totalMembers += uni.members.size();
+            totalSize += uni.size;
+        }
+        ss << L"// Total Members: " << totalMembers << L"\r\n";
+        ss << L"// Total Size: " << totalSize << L" bytes\r\n";
+        content = ss.str();
+    }
+    else if (param == 5)
+    {
+        std::wostringstream ss;
+        ss << L"// Enums List\r\n\r\n";
+        ss << L"// Total Enums: " << g_moduleInfo.enums.size() << L"\r\n\r\n";
+        
+        size_t totalValues = 0;
+        for (const auto& enm : g_moduleInfo.enums)
+        {
+            totalValues += enm.values.size();
+        }
+        ss << L"// Total Enum Values: " << totalValues << L"\r\n";
+        content = ss.str();
+    }
+    else if (param == 6)
+    {
+        std::wostringstream ss;
+        ss << L"// Global Variables List\r\n\r\n";
+        ss << L"// Total Global Variables: " << g_moduleInfo.globalVariables.size() << L"\r\n\r\n";
+        
+        size_t totalSize = 0;
+        for (const auto& var : g_moduleInfo.globalVariables)
+        {
+            totalSize += var.size;
+        }
+        ss << L"// Total Size: " << totalSize << L" bytes\r\n";
+        content = ss.str();
+    }
+    else if (param >= 10000 && param < 20000)
+    {
+        size_t idx = param - 10000;
         if (idx < g_moduleInfo.functions.size())
         {
             const auto& func = g_moduleInfo.functions[idx];
@@ -53,29 +168,29 @@ void ShowHeaderView(HTREEITEM hItem)
             content = ss.str();
         }
     }
-    else if (param >= 3000 && param < 6000)
+    else if (param >= 20000 && param < 50000)
     {
         const ClassInfo* pClass = nullptr;
         
-        if (param >= 3000 && param < 4000)
+        if (param >= 20000 && param < 30000)
         {
-            size_t idx = param - 3000;
+            size_t idx = param - 20000;
             if (idx < g_moduleInfo.classes.size())
             {
                 pClass = &g_moduleInfo.classes[idx];
             }
         }
-        else if (param >= 4000 && param < 5000)
+        else if (param >= 30000 && param < 40000)
         {
-            size_t idx = param - 4000;
+            size_t idx = param - 30000;
             if (idx < g_moduleInfo.structs.size())
             {
                 pClass = &g_moduleInfo.structs[idx];
             }
         }
-        else if (param >= 5000 && param < 6000)
+        else if (param >= 40000 && param < 50000)
         {
-            size_t idx = param - 5000;
+            size_t idx = param - 40000;
             if (idx < g_moduleInfo.unions.size())
             {
                 pClass = &g_moduleInfo.unions[idx];
@@ -143,9 +258,9 @@ void ShowHeaderView(HTREEITEM hItem)
             content = ss.str();
         }
     }
-    else if (param >= 6000 && param < 7000)
+    else if (param >= 50000 && param < 60000)
     {
-        size_t idx = param - 6000;
+        size_t idx = param - 50000;
         if (idx < g_moduleInfo.enums.size())
         {
             const auto& enm = g_moduleInfo.enums[idx];
@@ -158,9 +273,9 @@ void ShowHeaderView(HTREEITEM hItem)
             content = ss.str();
         }
     }
-    else if (param >= 7000 && param < 8000)
+    else if (param >= 60000 && param < 70000)
     {
-        size_t idx = param - 7000;
+        size_t idx = param - 60000;
         if (idx < g_moduleInfo.globalVariables.size())
         {
             const auto& var = g_moduleInfo.globalVariables[idx];

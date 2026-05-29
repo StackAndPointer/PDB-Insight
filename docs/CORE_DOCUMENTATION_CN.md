@@ -472,8 +472,11 @@ PDBInsight.exe [选项] [文件]
 | `-h, --help, /?` | 显示帮助信息 |
 | `-q, --quiet` | 安静模式（无UI，用于批处理） |
 | `-d, --download-pdb` | 自动下载DLL/EXE对应的PDB文件 |
-| `-e, --export <格式>` | 导出格式：csv, xml, header |
+| `-e, --export <格式>` | 导出格式：csv, xml, header, allheaders |
 | `-o, --output <路径>` | 输出文件/目录路径 |
+| `-c, --class <名称>` | 导出指定类/结构体 |
+| `-a, --all` | 导出所有类/结构体 |
+| `-l, --list` | 列出PDB中所有类 |
 
 **文件**:
 | 类型 | 说明 |
@@ -491,6 +494,15 @@ PDBInsight.exe -d kernel32.dll
 
 # 导出为CSV格式
 PDBInsight.exe -e csv -o output.csv mylib.pdb
+
+# 导出指定类的头文件
+PDBInsight.exe -e header -c MyClass -o MyClass.h mylib.pdb
+
+# 导出所有类头文件到目录
+PDBInsight.exe -e allheaders -o ./headers mylib.pdb
+
+# 列出PDB中所有类
+PDBInsight.exe -l mylib.pdb
 
 # 显示帮助
 PDBInsight.exe --help

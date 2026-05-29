@@ -147,9 +147,9 @@ void PopulateListView(HTREEITEM hItem)
             ListView_SetItemText(hListView, (int)i, 4, (LPWSTR)ssSize.str().c_str());
         }
     }
-    else if (param >= 2000 && param < 3000)
+    else if (param >= 10000 && param < 20000)
     {
-        size_t idx = param - 2000;
+        size_t idx = param - 10000;
         if (idx < g_moduleInfo.functions.size())
         {
             const auto& func = g_moduleInfo.functions[idx];
@@ -205,24 +205,24 @@ void PopulateListView(HTREEITEM hItem)
             addItem(LanguageManager::GetInstance().GetString(L"prop_virtual_functions", L"信息完整性"), FunctionInfoDisplayManager::FormatCompletenessLabel(displayInfo.completenessPercent));
         }
     }
-    else if (param >= 3000 && param < 6000)
+    else if (param >= 20000 && param < 50000)
     {
         size_t idx;
         const ClassInfo* pClass = nullptr;
         
-        if (param >= 3000 && param < 4000)
+        if (param >= 20000 && param < 30000)
         {
-            idx = param - 3000;
+            idx = param - 20000;
             if (idx < g_moduleInfo.classes.size()) pClass = &g_moduleInfo.classes[idx];
         }
-        else if (param >= 4000 && param < 5000)
+        else if (param >= 30000 && param < 40000)
         {
-            idx = param - 4000;
+            idx = param - 30000;
             if (idx < g_moduleInfo.structs.size()) pClass = &g_moduleInfo.structs[idx];
         }
-        else if (param >= 5000 && param < 6000)
+        else if (param >= 40000 && param < 50000)
         {
-            idx = param - 5000;
+            idx = param - 40000;
             if (idx < g_moduleInfo.unions.size()) pClass = &g_moduleInfo.unions[idx];
         }
 
@@ -365,9 +365,9 @@ void PopulateListView(HTREEITEM hItem)
             }
         }
     }
-    else if (param >= 6000 && param < 7000)
+    else if (param >= 50000 && param < 60000)
     {
-        size_t idx = param - 6000;
+        size_t idx = param - 50000;
         if (idx < g_moduleInfo.enums.size())
         {
             const auto& enm = g_moduleInfo.enums[idx];
@@ -400,9 +400,9 @@ void PopulateListView(HTREEITEM hItem)
             }
         }
     }
-    else if (param >= 7000 && param < 8000)
+    else if (param >= 60000 && param < 70000)
     {
-        size_t idx = param - 7000;
+        size_t idx = param - 60000;
         if (idx < g_moduleInfo.globalVariables.size())
         {
             const auto& var = g_moduleInfo.globalVariables[idx];

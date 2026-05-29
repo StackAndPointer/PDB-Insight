@@ -26,7 +26,7 @@ void PopulateTreeView()
     for (size_t i = 0; i < g_moduleInfo.functions.size(); ++i)
     {
         std::wstring displayName = PDBParser::GenerateFunctionSignature(g_moduleInfo.functions[i]);
-        AddTreeItem(hFunctions, displayName, 2000 + (DWORD)i);
+        AddTreeItem(hFunctions, displayName, 10000 + (DWORD)i);
         processedItems++;
         
         if (totalItems > 100 && processedItems % 50 == 0) {
@@ -46,7 +46,7 @@ void PopulateTreeView()
     HTREEITEM hClasses = AddTreeItem(hRoot, LanguageManager::GetInstance().GetString(L"tree_classes", L"类"), 2);
     for (size_t i = 0; i < g_moduleInfo.classes.size(); ++i)
     {
-        AddTreeItem(hClasses, g_moduleInfo.classes[i].name, 3000 + (DWORD)i);
+        AddTreeItem(hClasses, g_moduleInfo.classes[i].name, 20000 + (DWORD)i);
         processedItems++;
         
         if (totalItems > 100 && processedItems % 50 == 0) {
@@ -66,7 +66,7 @@ void PopulateTreeView()
     HTREEITEM hStructs = AddTreeItem(hRoot, LanguageManager::GetInstance().GetString(L"tree_structs", L"结构体"), 3);
     for (size_t i = 0; i < g_moduleInfo.structs.size(); ++i)
     {
-        AddTreeItem(hStructs, g_moduleInfo.structs[i].name, 4000 + (DWORD)i);
+        AddTreeItem(hStructs, g_moduleInfo.structs[i].name, 30000 + (DWORD)i);
         processedItems++;
         
         if (totalItems > 100 && processedItems % 50 == 0) {
@@ -86,7 +86,7 @@ void PopulateTreeView()
     HTREEITEM hUnions = AddTreeItem(hRoot, LanguageManager::GetInstance().GetString(L"tree_unions", L"联合体"), 4);
     for (size_t i = 0; i < g_moduleInfo.unions.size(); ++i)
     {
-        AddTreeItem(hUnions, g_moduleInfo.unions[i].name, 5000 + (DWORD)i);
+        AddTreeItem(hUnions, g_moduleInfo.unions[i].name, 40000 + (DWORD)i);
         processedItems++;
         
         if (totalItems > 100 && processedItems % 50 == 0) {
@@ -106,7 +106,7 @@ void PopulateTreeView()
     HTREEITEM hEnums = AddTreeItem(hRoot, LanguageManager::GetInstance().GetString(L"tree_enums", L"枚举"), 5);
     for (size_t i = 0; i < g_moduleInfo.enums.size(); ++i)
     {
-        AddTreeItem(hEnums, g_moduleInfo.enums[i].name, 6000 + (DWORD)i);
+        AddTreeItem(hEnums, g_moduleInfo.enums[i].name, 50000 + (DWORD)i);
         processedItems++;
         
         if (totalItems > 100 && processedItems % 50 == 0) {
@@ -126,7 +126,7 @@ void PopulateTreeView()
     HTREEITEM hGlobalVars = AddTreeItem(hRoot, LanguageManager::GetInstance().GetString(L"tree_global_variables", L"全局变量"), 6);
     for (size_t i = 0; i < g_moduleInfo.globalVariables.size(); ++i)
     {
-        AddTreeItem(hGlobalVars, g_moduleInfo.globalVariables[i].name, 7000 + (DWORD)i);
+        AddTreeItem(hGlobalVars, g_moduleInfo.globalVariables[i].name, 60000 + (DWORD)i);
         processedItems++;
         
         if (totalItems > 100 && processedItems % 50 == 0) {
