@@ -101,7 +101,12 @@ bool PDBDownloader::DownloadFile(const std::wstring& url, const std::wstring& lo
         progressCallback(25, L"Opening connection...");
     }
     
-    HINTERNET hUrl = InternetOpenUrlW(hInternet, url.c_str(), NULL, 0, INTERNET_FLAG_RELOAD | INTERNET_FLAG_SECURE, 0);
+    DWORD flags = INTERNET_FLAG_RELOAD;
+    if (url.find(L"https://") == 0 || url.find(L"https:") == 0) {
+        flags |= INTERNET_FLAG_SECURE;
+    }
+    
+    HINTERNET hUrl = InternetOpenUrlW(hInternet, url.c_str(), NULL, 0, flags, 0);
     if (!hUrl) {
         InternetCloseHandle(hInternet);
         return false;
