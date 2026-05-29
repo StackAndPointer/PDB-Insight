@@ -14,6 +14,7 @@ static const int IDC_CHECK_FLATTEN = 1010;
 static const int IDC_CHECK_REMOVEVOID = 1011;
 static const int IDC_CHECK_IDACOMPAT = 1012;
 static const int IDC_CHECK_INCLUDEENUMS = 1013;
+static const int IDC_CHECK_USEMIRROR = 1014;
 static const int IDC_BUTTON_OK = 2001;
 static const int IDC_BUTTON_CANCEL = 2002;
 
@@ -71,6 +72,19 @@ void SettingsManager::CreateControls(HWND hWnd) {
         xMargin + DPIManager::ScaleX(15), y, groupWidth - DPIManager::ScaleX(30), DPIManager::ScaleY(16),
         hWnd, reinterpret_cast<HMENU>(static_cast<UINT_PTR>(IDC_CHECK_IDACOMPAT)), hInst, nullptr);
     
+    y += groupHeight - DPIManager::ScaleY(18) + yMargin;
+    
+    groupHeight = DPIManager::ScaleY(45);
+    m_hGroupDownloadOptions = CreateWindowExW(0, L"BUTTON", langMgr.GetString(L"group_download_options", L"下载选项").c_str(),
+        BS_GROUPBOX | WS_CHILD | WS_VISIBLE,
+        xMargin, y, groupWidth, groupHeight, hWnd, nullptr, hInst, nullptr);
+    
+    y += DPIManager::ScaleY(18);
+    m_hCheckUseMirrorSource = CreateWindowExW(0, L"BUTTON", langMgr.GetString(L"opt_use_mirror_source", L"使用国内镜像源加速下载").c_str(),
+        BS_AUTOCHECKBOX | WS_CHILD | WS_VISIBLE | WS_TABSTOP,
+        xMargin + DPIManager::ScaleX(15), y, groupWidth - DPIManager::ScaleX(30), DPIManager::ScaleY(16),
+        hWnd, reinterpret_cast<HMENU>(static_cast<UINT_PTR>(IDC_CHECK_USEMIRROR)), hInst, nullptr);
+    
     y += groupHeight - DPIManager::ScaleY(18) + yMargin + DPIManager::ScaleY(10);
     
     int buttonWidth = DPIManager::ScaleX(70);
@@ -93,6 +107,7 @@ void SettingsManager::InitControls(HWND hWnd) {
     SendMessageW(m_hCheckRemoveVoidParams, BM_SETCHECK, settings.removeVoidParams ? BST_CHECKED : BST_UNCHECKED, 0);
     SendMessageW(m_hCheckIncludeEnumsInEnumsH, BM_SETCHECK, settings.includeEnumsInEnumsH ? BST_CHECKED : BST_UNCHECKED, 0);
     SendMessageW(m_hCheckIDACompatible, BM_SETCHECK, settings.idaCompatible ? BST_CHECKED : BST_UNCHECKED, 0);
+    SendMessageW(m_hCheckUseMirrorSource, BM_SETCHECK, ConfigManager::GetInstance().GetUseMirrorSource() ? BST_CHECKED : BST_UNCHECKED, 0);
 }
 
 void SettingsManager::SaveSettings(HWND hWnd) {
@@ -104,6 +119,7 @@ void SettingsManager::SaveSettings(HWND hWnd) {
     settings.idaCompatible = (SendMessageW(m_hCheckIDACompatible, BM_GETCHECK, 0, 0) == BST_CHECKED);
     
     ConfigManager::GetInstance().SetExportSettings(settings);
+    ConfigManager::GetInstance().SetUseMirrorSource(SendMessageW(m_hCheckUseMirrorSource, BM_GETCHECK, 0, 0) == BST_CHECKED);
     ConfigManager::GetInstance().Save();
 }
 
@@ -201,7 +217,7 @@ void SettingsManager::ShowSettingsWindow(HWND hParent) {
     
     LanguageManager& langMgr = LanguageManager::GetInstance();
     int windowWidth = DPIManager::ScaleX(380);
-    int windowHeight = DPIManager::ScaleY(380);
+    int windowHeight = DPIManager::ScaleY(420);
     
     RECT parentRect;
     GetWindowRect(hParent, &parentRect);

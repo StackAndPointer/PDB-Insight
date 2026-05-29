@@ -31,6 +31,9 @@ public:
     const ExportSettings& GetExportSettings() const { return m_exportSettings; }
     void SetExportSettings(const ExportSettings& settings) { m_exportSettings = settings; }
 
+    bool GetUseMirrorSource() const { return m_useMirrorSource; }
+    void SetUseMirrorSource(bool use) { m_useMirrorSource = use; }
+
     const std::vector<std::wstring>& GetSearchHistory() const { return m_searchHistory; }
     void AddSearchHistory(const std::wstring& text);
     void ClearSearchHistory();
@@ -46,6 +49,7 @@ private:
     std::wstring m_language;
     NumberDisplayMode m_numberMode;
     bool m_expandBaseClasses;
+    bool m_useMirrorSource;
     ExportSettings m_exportSettings;
     std::vector<std::wstring> m_searchHistory;
     static const size_t MAX_SEARCH_HISTORY = 20;

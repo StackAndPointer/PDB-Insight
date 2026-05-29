@@ -1,4 +1,5 @@
 #include "PDBDownloader.h"
+#include "ConfigManager.h"
 #include <wininet.h>
 #include <sstream>
 #include <iomanip>
@@ -65,7 +66,14 @@ bool PDBDownloader::GetDebugInfoFromDll(const std::wstring& dllPath, std::wstrin
 std::wstring PDBDownloader::BuildMicrosoftSymbolUrl(const std::wstring& pdbName, const std::wstring& guid, DWORD age) {
     std::wstring formattedGuid = FormatGuidForUrl(guid, age);
     
-    std::wstring url = L"https://msdl.microsoft.com/download/symbols/";
+    std::wstring baseUrl;
+    if (ConfigManager::GetInstance().GetUseMirrorSource()) {
+        baseUrl = L"https://symbols.yandex.ru/";
+    } else {
+        baseUrl = L"https://msdl.microsoft.com/download/symbols/";
+    }
+    
+    std::wstring url = baseUrl;
     url += pdbName;
     url += L"/";
     url += formattedGuid;

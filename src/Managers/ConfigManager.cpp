@@ -13,7 +13,8 @@ ConfigManager& ConfigManager::GetInstance() {
 ConfigManager::ConfigManager() 
     : m_language(L"zh-CN")
     , m_numberMode(NUMBER_HEX)
-    , m_expandBaseClasses(false) {
+    , m_expandBaseClasses(false)
+    , m_useMirrorSource(false) {
 }
 
 std::wstring ConfigManager::GetConfigFilePath() {
@@ -58,6 +59,8 @@ bool ConfigManager::Load() {
                 m_exportSettings.idaCompatible = (value == L"1");
             } else if (key == L"exportIncludeEnumsInEnumsH") {
                 m_exportSettings.includeEnumsInEnumsH = (value == L"1");
+            } else if (key == L"useMirrorSource") {
+                m_useMirrorSource = (value == L"1");
             } else if (key.find(L"searchHistory[") == 0 && key.back() == L']') {
                 m_searchHistory.push_back(value);
             }
@@ -83,6 +86,7 @@ bool ConfigManager::Save() {
     file << L"exportRemoveVoidParams=" << (m_exportSettings.removeVoidParams ? L"1" : L"0") << L"\n";
     file << L"exportIDACompatible=" << (m_exportSettings.idaCompatible ? L"1" : L"0") << L"\n";
     file << L"exportIncludeEnumsInEnumsH=" << (m_exportSettings.includeEnumsInEnumsH ? L"1" : L"0") << L"\n";
+    file << L"useMirrorSource=" << (m_useMirrorSource ? L"1" : L"0") << L"\n";
     
     for (size_t i = 0; i < m_searchHistory.size(); ++i) {
         file << L"searchHistory[" << i << L"]=" << m_searchHistory[i] << L"\n";

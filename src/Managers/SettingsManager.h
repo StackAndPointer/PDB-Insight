@@ -33,6 +33,9 @@ private:
     HWND m_hGroupIDACompatibility;
     HWND m_hCheckIDACompatible;
     
+    HWND m_hGroupDownloadOptions;
+    HWND m_hCheckUseMirrorSource;
+    
     HWND m_hButtonOK;
     HWND m_hButtonCancel;
 };
