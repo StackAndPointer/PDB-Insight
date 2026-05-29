@@ -12,6 +12,14 @@ void PopulateTreeView()
 
     if (!g_pdbLoaded) return;
 
+    size_t totalItems = g_moduleInfo.functions.size() + g_moduleInfo.classes.size() + 
+                        g_moduleInfo.structs.size() + g_moduleInfo.unions.size() + 
+                        g_moduleInfo.enums.size() + g_moduleInfo.globalVariables.size();
+    size_t processedItems = 0;
+
+    UpdateStatusBar(LanguageManager::GetInstance().GetString(L"tree_module", L"模块") + L" - " + 
+                    LanguageManager::GetInstance().GetString(L"status_loading", L"正在加载..."));
+
     HTREEITEM hRoot = AddTreeItem(TVI_ROOT, g_moduleInfo.name.empty() ? LanguageManager::GetInstance().GetString(L"tree_module", L"模块") : g_moduleInfo.name, 0);
 
     HTREEITEM hFunctions = AddTreeItem(hRoot, LanguageManager::GetInstance().GetString(L"tree_functions", L"函数"), 1);
@@ -19,36 +27,120 @@ void PopulateTreeView()
     {
         std::wstring displayName = PDBParser::GenerateFunctionSignature(g_moduleInfo.functions[i]);
         AddTreeItem(hFunctions, displayName, 2000 + (DWORD)i);
+        processedItems++;
+        
+        if (totalItems > 100 && processedItems % 50 == 0) {
+            int percent = (int)(processedItems * 100 / totalItems);
+            std::wstring status = LanguageManager::GetInstance().GetString(L"tree_functions", L"函数") + L": " + 
+                                  std::to_wstring(percent) + L"% (" + std::to_wstring(processedItems) + L"/" + std::to_wstring(totalItems) + L")";
+            UpdateStatusBar(status);
+            
+            MSG msg;
+            while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
+                TranslateMessage(&msg);
+                DispatchMessage(&msg);
+            }
+        }
     }
 
     HTREEITEM hClasses = AddTreeItem(hRoot, LanguageManager::GetInstance().GetString(L"tree_classes", L"类"), 2);
     for (size_t i = 0; i < g_moduleInfo.classes.size(); ++i)
     {
         AddTreeItem(hClasses, g_moduleInfo.classes[i].name, 3000 + (DWORD)i);
+        processedItems++;
+        
+        if (totalItems > 100 && processedItems % 50 == 0) {
+            int percent = (int)(processedItems * 100 / totalItems);
+            std::wstring status = LanguageManager::GetInstance().GetString(L"tree_classes", L"类") + L": " + 
+                                  std::to_wstring(percent) + L"% (" + std::to_wstring(processedItems) + L"/" + std::to_wstring(totalItems) + L")";
+            UpdateStatusBar(status);
+            
+            MSG msg;
+            while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
+                TranslateMessage(&msg);
+                DispatchMessage(&msg);
+            }
+        }
     }
 
     HTREEITEM hStructs = AddTreeItem(hRoot, LanguageManager::GetInstance().GetString(L"tree_structs", L"结构体"), 3);
     for (size_t i = 0; i < g_moduleInfo.structs.size(); ++i)
     {
         AddTreeItem(hStructs, g_moduleInfo.structs[i].name, 4000 + (DWORD)i);
+        processedItems++;
+        
+        if (totalItems > 100 && processedItems % 50 == 0) {
+            int percent = (int)(processedItems * 100 / totalItems);
+            std::wstring status = LanguageManager::GetInstance().GetString(L"tree_structs", L"结构体") + L": " + 
+                                  std::to_wstring(percent) + L"% (" + std::to_wstring(processedItems) + L"/" + std::to_wstring(totalItems) + L")";
+            UpdateStatusBar(status);
+            
+            MSG msg;
+            while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
+                TranslateMessage(&msg);
+                DispatchMessage(&msg);
+            }
+        }
     }
 
     HTREEITEM hUnions = AddTreeItem(hRoot, LanguageManager::GetInstance().GetString(L"tree_unions", L"联合体"), 4);
     for (size_t i = 0; i < g_moduleInfo.unions.size(); ++i)
     {
         AddTreeItem(hUnions, g_moduleInfo.unions[i].name, 5000 + (DWORD)i);
+        processedItems++;
+        
+        if (totalItems > 100 && processedItems % 50 == 0) {
+            int percent = (int)(processedItems * 100 / totalItems);
+            std::wstring status = LanguageManager::GetInstance().GetString(L"tree_unions", L"联合体") + L": " + 
+                                  std::to_wstring(percent) + L"% (" + std::to_wstring(processedItems) + L"/" + std::to_wstring(totalItems) + L")";
+            UpdateStatusBar(status);
+            
+            MSG msg;
+            while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
+                TranslateMessage(&msg);
+                DispatchMessage(&msg);
+            }
+        }
     }
 
     HTREEITEM hEnums = AddTreeItem(hRoot, LanguageManager::GetInstance().GetString(L"tree_enums", L"枚举"), 5);
     for (size_t i = 0; i < g_moduleInfo.enums.size(); ++i)
     {
         AddTreeItem(hEnums, g_moduleInfo.enums[i].name, 6000 + (DWORD)i);
+        processedItems++;
+        
+        if (totalItems > 100 && processedItems % 50 == 0) {
+            int percent = (int)(processedItems * 100 / totalItems);
+            std::wstring status = LanguageManager::GetInstance().GetString(L"tree_enums", L"枚举") + L": " + 
+                                  std::to_wstring(percent) + L"% (" + std::to_wstring(processedItems) + L"/" + std::to_wstring(totalItems) + L")";
+            UpdateStatusBar(status);
+            
+            MSG msg;
+            while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
+                TranslateMessage(&msg);
+                DispatchMessage(&msg);
+            }
+        }
     }
 
     HTREEITEM hGlobalVars = AddTreeItem(hRoot, LanguageManager::GetInstance().GetString(L"tree_global_variables", L"全局变量"), 6);
     for (size_t i = 0; i < g_moduleInfo.globalVariables.size(); ++i)
     {
         AddTreeItem(hGlobalVars, g_moduleInfo.globalVariables[i].name, 7000 + (DWORD)i);
+        processedItems++;
+        
+        if (totalItems > 100 && processedItems % 50 == 0) {
+            int percent = (int)(processedItems * 100 / totalItems);
+            std::wstring status = LanguageManager::GetInstance().GetString(L"tree_global_variables", L"全局变量") + L": " + 
+                                  std::to_wstring(percent) + L"% (" + std::to_wstring(processedItems) + L"/" + std::to_wstring(totalItems) + L")";
+            UpdateStatusBar(status);
+            
+            MSG msg;
+            while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
+                TranslateMessage(&msg);
+                DispatchMessage(&msg);
+            }
+        }
     }
 
     TreeView_Expand(hTreeView, hRoot, TVE_EXPAND);
