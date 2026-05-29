@@ -1,4 +1,5 @@
 #include "LanguageManager.h"
+#include "Resource.h"
 #include <algorithm>
 #include <shlwapi.h>
 
@@ -17,6 +18,41 @@ std::wstring LanguageManager::GetLanguageFilePath(const std::wstring& languageCo
     std::wstring filePath = modulePath;
     filePath += L"\\i18n\\" + languageCode + L".json";
     return filePath;
+}
+
+bool LanguageManager::LoadLanguageFromResource(UINT resourceId) {
+    HMODULE hModule = GetModuleHandleW(nullptr);
+    HRSRC hResource = FindResourceW(hModule, MAKEINTRESOURCEW(resourceId), RT_RCDATA);
+    if (!hResource) {
+        return false;
+    }
+    
+    HGLOBAL hData = LoadResource(hModule, hResource);
+    if (!hData) {
+        return false;
+    }
+    
+    DWORD size = SizeofResource(hModule, hResource);
+    const char* data = static_cast<const char*>(LockResource(hData));
+    if (!data || size == 0) {
+        return false;
+    }
+    
+    std::string content(data, size);
+    
+    std::wstring wcontent;
+    int len = MultiByteToWideChar(CP_UTF8, 0, content.c_str(), -1, nullptr, 0);
+    if (len > 0) {
+        wcontent.resize(len);
+        MultiByteToWideChar(CP_UTF8, 0, content.c_str(), -1, &wcontent[0], len);
+        wcontent.pop_back();
+    }
+    
+    if (ParseJSON(wcontent)) {
+        m_loaded = true;
+        return true;
+    }
+    return false;
 }
 
 bool LanguageManager::LoadLanguageFile(const std::wstring& filePath) {
@@ -46,6 +82,18 @@ bool LanguageManager::LoadLanguageFile(const std::wstring& filePath) {
 }
 
 bool LanguageManager::LoadLanguageByCode(const std::wstring& languageCode) {
+    UINT resourceId = 0;
+    if (languageCode == L"zh-CN") {
+        resourceId = IDR_LANG_ZH_CN;
+    } else if (languageCode == L"en-US") {
+        resourceId = IDR_LANG_EN_US;
+    }
+    
+    if (resourceId != 0 && LoadLanguageFromResource(resourceId)) {
+        m_currentLanguageCode = languageCode;
+        return true;
+    }
+    
     std::wstring filePath = GetLanguageFilePath(languageCode);
     if (LoadLanguageFile(filePath)) {
         m_currentLanguageCode = languageCode;

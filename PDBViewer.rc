@@ -22,6 +22,14 @@ IDI_SMALL              ICON                    "small.ico"
 
 /////////////////////////////////////////////////////////////////////////////
 //
+// Language Files (embedded JSON)
+//
+
+IDR_LANG_ZH_CN         RCDATA                  "i18n\\zh-CN.json"
+IDR_LANG_EN_US         RCDATA                  "i18n\\en-US.json"
+
+/////////////////////////////////////////////////////////////////////////////
+//
 // Dialog
 //
 

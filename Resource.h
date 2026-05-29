@@ -34,6 +34,8 @@
 #define IDC_GENERATE_ENUM_VALUE_COMMENTS 2017
 #define IDC_GROUP_IDA_COMPATIBILITY     2018
 #define IDC_IDA_COMPATIBLE              2019
+#define IDR_LANG_ZH_CN                  2020
+#define IDR_LANG_EN_US                  2021
 #define ID_MENU_SETTINGS                3000
 #define ID_MENU_OPEN_DLL                3001
 #define ID_MENU_OPEN_CACHE              40001
@@ -44,7 +46,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        105
 #define _APS_NEXT_COMMAND_VALUE         40001
-#define _APS_NEXT_CONTROL_VALUE         2020
+#define _APS_NEXT_CONTROL_VALUE         2022
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif

@@ -27,6 +27,7 @@ private:
 
     bool ParseJSON(const std::wstring& content);
     std::wstring GetLanguageFilePath(const std::wstring& languageCode);
+    bool LoadLanguageFromResource(UINT resourceId);
 
     std::map<std::wstring, std::wstring> m_strings;
     bool m_loaded;
