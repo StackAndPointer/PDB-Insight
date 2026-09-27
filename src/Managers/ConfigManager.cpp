@@ -53,6 +53,8 @@ bool ConfigManager::Load() {
                 m_expandBaseClasses = (value == L"1");
             } else if (key == L"exportFlattenNamespaces") {
                 m_exportSettings.flattenNamespaces = (value == L"1");
+            } else if (key == L"exportExpandAnonymousAggregates") {
+                m_exportSettings.expandAnonymousAggregates = (value == L"1");
             } else if (key == L"exportRemoveVoidParams") {
                 m_exportSettings.removeVoidParams = (value == L"1");
             } else if (key == L"exportIDACompatible") {
@@ -85,6 +87,7 @@ bool ConfigManager::Save() {
     file << L"numberMode=" << static_cast<int>(m_numberMode) << L"\n";
     file << L"expandBaseClasses=" << (m_expandBaseClasses ? L"1" : L"0") << L"\n";
     file << L"exportFlattenNamespaces=" << (m_exportSettings.flattenNamespaces ? L"1" : L"0") << L"\n";
+    file << L"exportExpandAnonymousAggregates=" << (m_exportSettings.expandAnonymousAggregates ? L"1" : L"0") << L"\n";
     file << L"exportRemoveVoidParams=" << (m_exportSettings.removeVoidParams ? L"1" : L"0") << L"\n";
     file << L"exportIDACompatible=" << (m_exportSettings.idaCompatible ? L"1" : L"0") << L"\n";
     file << L"exportIncludeEnumsInEnumsH=" << (m_exportSettings.includeEnumsInEnumsH ? L"1" : L"0") << L"\n";

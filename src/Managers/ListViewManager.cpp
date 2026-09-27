@@ -1,4 +1,5 @@
 #include "ListViewManager.h"
+#include "DPIManager.h"
 #include "FunctionInfoDisplayManager.h"
 #include "LanguageManager.h"
 #include "TreeNodeHelper.h"
@@ -6,13 +7,17 @@
 void PopulateListView(HTREEITEM hItem)
 {
     ListView_DeleteAllItems(hListView);
+    SendMessageW(hListView, WM_SETREDRAW, FALSE, 0);
 
     for (int i = Header_GetItemCount(ListView_GetHeader(hListView)) - 1; i >= 0; --i)
     {
         ListView_DeleteColumn(hListView, i);
     }
 
-    if (!hItem || !g_pdbLoaded) return;
+    if (!hItem || !g_pdbLoaded) {
+        SendMessageW(hListView, WM_SETREDRAW, TRUE, 0);
+        return;
+    }
 
     TVITEM tvi;
     tvi.hItem = hItem;
@@ -434,6 +439,9 @@ void PopulateListView(HTREEITEM hItem)
             addItem(LanguageManager::GetInstance().GetString(L"col_size", L"大小"), PDBHeaderGenerator::FormatNumber(var.size, g_numberMode));
         }
     }
+    ResizeListViewColumns();
+    SendMessageW(hListView, WM_SETREDRAW, TRUE, 0);
+    InvalidateRect(hListView, nullptr, TRUE);
 }
 
 void AddListViewColumn(int index, const std::wstring& text, int width)
@@ -442,7 +450,26 @@ void AddListViewColumn(int index, const std::wstring& text, int width)
     lvc.mask = LVCF_FMT | LVCF_WIDTH | LVCF_TEXT | LVCF_SUBITEM;
     lvc.iSubItem = index;
     lvc.pszText = (LPWSTR)text.c_str();
-    lvc.cx = width;
+    lvc.cx = DPIManager::ScaleX(width);
     lvc.fmt = LVCFMT_LEFT;
     ListView_InsertColumn(hListView, index, &lvc);
+}
+
+void ResizeListViewColumns()
+{
+    if (!hListView) return;
+    int count = Header_GetItemCount(ListView_GetHeader(hListView));
+    if (count <= 0) return;
+
+    RECT client{};
+    GetClientRect(hListView, &client);
+    int available = max(0, client.right - client.left - GetSystemMetrics(SM_CXVSCROLL));
+    std::vector<int> widths(count);
+    int total = 0;
+    for (int i = 0; i < count; ++i) {
+        widths[i] = ListView_GetColumnWidth(hListView, i);
+        total += widths[i];
+    }
+    if (total < available) widths[count - 1] += available - total;
+    for (int i = 0; i < count; ++i) ListView_SetColumnWidth(hListView, i, widths[i]);
 }

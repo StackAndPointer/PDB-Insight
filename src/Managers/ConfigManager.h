@@ -7,6 +7,7 @@
 
 struct ExportSettings {
     bool flattenNamespaces = true;
+    bool expandAnonymousAggregates = true;
     bool removeVoidParams = true;
     bool idaCompatible = true;
     bool includeEnumsInEnumsH = true;

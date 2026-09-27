@@ -3,6 +3,7 @@
 HINSTANCE hInst = nullptr;
 WCHAR szTitle[MAX_LOADSTRING] = { 0 };
 WCHAR szWindowClass[MAX_LOADSTRING] = { 0 };
+HWND g_hMainWindow = nullptr;
 
 HWND hTreeView = nullptr;
 HWND hTabCtrl = nullptr;
@@ -12,8 +13,12 @@ HWND hStatusBar = nullptr;
 HWND hEditSearch = nullptr;
 HWND hButtonSearch = nullptr;
 HWND hButtonSearchHistory = nullptr;
+HWND hButtonClearSearch = nullptr;
+HWND hButtonCopyHeader = nullptr;
+HWND hButtonCancelTask = nullptr;
+HWND hProgressTask = nullptr;
+HWND hTooltip = nullptr;
 HWND hSplitter = nullptr;
-HWND hInfoText = nullptr;
 
 bool g_splitterDragging = false;
 int g_splitterPos = 0;
@@ -22,7 +27,6 @@ WCHAR g_szTabText1[64] = L"详细信息";
 WCHAR g_szTabText2[64] = L"头文件视图";
 int g_currentTabIndex = 0;
 
-PDBParser g_parser;
 ModuleInfo g_moduleInfo;
 bool g_pdbLoaded = false;
 NumberDisplayMode g_numberMode = NUMBER_HEX;
@@ -30,6 +34,7 @@ bool g_expandBaseClasses = false;
 std::wstring g_currentLanguage = L"zh-CN";
 
 WNDPROC g_pOldEditProc = nullptr;
+WNDPROC g_pOldClearButtonProc = nullptr;
 WNDPROC g_pOldRichEditProc = nullptr;
 WNDPROC g_pOldSplitterProc = nullptr;
 WNDPROC g_pOldListViewProc = nullptr;

@@ -1,13 +1,11 @@
 #pragma once
 
-#include <windows.h>
-#include <string>
+#include "PDBViewerGlobals.h"
 
 class SettingsManager {
 public:
     static SettingsManager& GetInstance();
-
-    void ShowSettingsWindow(HWND hParent);
+    void ShowSettingsWindow(HWND parent);
     void CloseSettingsWindow();
 
 private:
@@ -16,28 +14,26 @@ private:
     SettingsManager(const SettingsManager&) = delete;
     SettingsManager& operator=(const SettingsManager&) = delete;
 
-    static LRESULT CALLBACK SettingsWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
-    void CreateControls(HWND hWnd);
-    void InitControls(HWND hWnd);
-    void SaveSettings(HWND hWnd);
-    void OnSize(HWND hWnd);
+    static LRESULT CALLBACK SettingsWndProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam);
+    void CreateControls(HWND window);
+    void InitControls();
+    bool SaveSettings(HWND owner);
+    void OnSize(HWND window);
+    void UpdateMirrorControls();
 
-    HWND m_hWnd;
-    HWND m_hParent;
-    
-    HWND m_hGroupEnhancedOptions;
-    HWND m_hCheckFlattenNamespaces;
-    HWND m_hCheckRemoveVoidParams;
-    HWND m_hCheckIncludeEnumsInEnumsH;
-    
-    HWND m_hGroupIDACompatibility;
-    HWND m_hCheckIDACompatible;
-    
-    HWND m_hGroupDownloadOptions;
-    HWND m_hCheckUseMirrorSource;
-    HWND m_hEditMirrorUrl;
-    HWND m_hLabelMirrorUrl;
-    
-    HWND m_hButtonOK;
-    HWND m_hButtonCancel;
+    HWND m_window;
+    HWND m_parent;
+    HWND m_groupEnhanced;
+    HWND m_checkFlattenNamespaces;
+    HWND m_checkRemoveVoidParams;
+    HWND m_checkIncludeEnums;
+    HWND m_checkExpandAnonymous;
+    HWND m_groupIda;
+    HWND m_checkIdaCompatible;
+    HWND m_groupDownload;
+    HWND m_checkUseMirror;
+    HWND m_labelMirrorUrl;
+    HWND m_editMirrorUrl;
+    HWND m_buttonOk;
+    HWND m_buttonCancel;
 };

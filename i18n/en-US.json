@@ -154,6 +154,7 @@
     
     "group_enhanced_options": "Export Enhanced Options",
     "opt_flatten_namespaces": "Flatten Namespaces",
+    "opt_expand_anonymous_aggregates": "Expand Anonymous Struct/Union",
     "opt_remove_void_params": "Remove Void Params",
     "opt_include_enums_in_enumsh": "Include Enums in Enums.h",
     "opt_generate_typedefs": "Generate TypeDefs",
@@ -170,5 +171,31 @@
     
     "button_ok": "OK",
     "button_cancel": "Cancel",
-    "info_export_hint": "If symbol information is incomplete, please export to view"
+    "info_export_hint": "If symbol information is incomplete, please export to view",
+
+    "button_cancel_task": "Cancel Task",
+    "clear_search": "Clear Search",
+    "search_history": "Search History",
+    "search_tooltip": "Search symbols and press Enter",
+    "search_placeholder": "Search functions, classes, structs, or variables...",
+    "menu_copy": "Copy",
+    "menu_search": "Search Selection",
+    "search_results": "Search Results",
+    "search_no_results": "No matching results",
+
+    "status_reading_debug_info": "Reading debug info from DLL/EXE...",
+    "status_debug_info_found": "Debug info found: ",
+    "status_connecting_symbol_server": "Connecting to Microsoft symbol server...",
+    "status_opening_connection": "Opening connection...",
+    "status_download_complete": "Download complete",
+    "status_parsing_functions": "Parsing functions...",
+    "status_parsing_global_variables": "Parsing global variables...",
+    "status_parsing_classes": "Parsing classes...",
+    "status_parsing_structs_unions": "Parsing structs and unions...",
+    "status_complete": "Complete",
+    "status_downloading_progress": "Downloading: ",
+    "status_canceling": "Cancelling task...",
+    "status_task_cancelled": "Task cancelled",
+    "status_task_failed": "Task failed",
+    "msg_invalid_mirror_url": "Mirror URL must start with http:// or https://"
 }

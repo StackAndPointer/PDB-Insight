@@ -4,6 +4,22 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <memory>
+
+enum class SyntaxKind {
+    Keyword,
+    Type,
+    Identifier,
+    Comment,
+    Literal,
+    Punctuation
+};
+
+struct SyntaxSpan {
+    size_t begin = 0;
+    size_t end = 0;
+    SyntaxKind kind = SyntaxKind::Identifier;
+};
 
 enum NumberDisplayMode {
     NUMBER_HEX,
@@ -33,67 +49,101 @@ enum InheritanceType {
     PDB_INHERITANCE_UNKNOWN
 };
 
+enum class TypeRefKind {
+    Named,
+    Pointer,
+    Reference,
+    Array,
+    Function
+};
+
+struct TypeRef {
+    TypeRefKind kind = TypeRefKind::Named;
+    std::wstring name;
+    std::shared_ptr<TypeRef> child;
+    ULONGLONG arrayCount = 0;
+    bool hasKnownArrayCount = false;
+    bool isConst = false;
+    bool isVolatile = false;
+    bool isRValueReference = false;
+    std::vector<TypeRef> functionParameters;
+    bool isVariadic = false;
+    CallingConvention callingConvention = PDB_CALL_UNKNOWN;
+};
+
+struct ClassInfo;
+
 struct ParameterInfo {
     std::wstring name;
     std::wstring type;
-    bool hasDefaultValue;
+    bool hasDefaultValue = false;
+    TypeRef typeRef;
 };
 
 struct FunctionInfo {
     std::wstring name;
     std::wstring undecoratedName;
+    std::wstring displaySignature;
     std::wstring returnType;
-    CallingConvention callingConvention;
+    TypeRef returnTypeRef;
+    CallingConvention callingConvention = PDB_CALL_UNKNOWN;
     std::vector<ParameterInfo> parameters;
-    DWORD rva;
-    ULONGLONG virtualAddress;
-    ULONGLONG size;
-    bool isStatic;
-    bool isVirtual;
-    bool isMemberFunction;
+    DWORD rva = 0;
+    ULONGLONG virtualAddress = 0;
+    ULONGLONG size = 0;
+    bool isStatic = false;
+    bool isVirtual = false;
+    bool isMemberFunction = false;
     std::wstring className;
 };
 
 struct MemberVariableInfo {
     std::wstring name;
     std::wstring type;
-    LONG offset;
-    AccessType access;
-    DWORD bitPosition;
-    DWORD bitSize;
+    LONG offset = -1;
+    AccessType access = PDB_ACCESS_UNKNOWN;
+    DWORD bitPosition = 0;
+    DWORD bitSize = 0;
+    TypeRef typeRef;
+    bool isBitfield = false;
+    bool isAnonymous = false;
+    std::shared_ptr<ClassInfo> anonymousType;
 };
 
 struct BaseClassInfo {
     std::wstring name;
-    InheritanceType inheritanceType;
-    LONG offset;
-    AccessType access;
+    InheritanceType inheritanceType = PDB_INHERITANCE_UNKNOWN;
+    LONG offset = 0;
+    AccessType access = PDB_ACCESS_UNKNOWN;
 };
 
 struct VirtualFunctionInfo {
     std::wstring name;
     std::wstring returnType;
+    TypeRef returnTypeRef;
     std::vector<ParameterInfo> parameters;
-    DWORD rva;
-    ULONGLONG virtualAddress;
-    int vtableIndex;
+    DWORD rva = 0;
+    ULONGLONG virtualAddress = 0;
+    int vtableIndex = -1;
+    AccessType access = PDB_ACCESS_PUBLIC;
+    bool isPure = false;
 };
 
 struct ClassInfo {
     std::wstring name;
-    ULONGLONG size;
-    ULONGLONG alignment;
+    ULONGLONG size = 0;
+    ULONGLONG alignment = 0;
     std::vector<BaseClassInfo> baseClasses;
     std::vector<MemberVariableInfo> members;
     std::vector<std::wstring> memberFunctions;
     std::vector<VirtualFunctionInfo> virtualFunctions;
-    bool isStruct;
-    bool isUnion;
+    bool isStruct = false;
+    bool isUnion = false;
 };
 
 struct EnumValueInfo {
     std::wstring name;
-    LONGLONG value;
+    LONGLONG value = 0;
 };
 
 struct EnumInfo {
@@ -105,9 +155,10 @@ struct EnumInfo {
 struct GlobalVariableInfo {
     std::wstring name;
     std::wstring type;
-    DWORD rva;
-    ULONGLONG virtualAddress;
-    ULONGLONG size;
+    DWORD rva = 0;
+    ULONGLONG virtualAddress = 0;
+    ULONGLONG size = 0;
+    TypeRef typeRef;
 };
 
 struct ModuleInfo {

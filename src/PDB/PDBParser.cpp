@@ -1,10 +1,12 @@
 #include "PDBParser.h"
+#include "PDBHeaderGenerator.h"
 #include "diaCreate.h"
 #include "cvConst.h"
 #include <comdef.h>
 #include <sstream>
 #include <iomanip>
 #include <shlwapi.h>
+#include <unordered_set>
 
 #pragma comment(lib, "Advapi32.lib")
 #pragma comment(lib, "OleAut32.lib")
@@ -22,6 +24,10 @@ PDBParser::PDBParser()
 
 PDBParser::~PDBParser() {
     Cleanup();
+    if (m_comInitialized) {
+        CoUninitialize();
+        m_comInitialized = false;
+    }
 }
 
 bool PDBParser::Initialize() {
@@ -30,6 +36,7 @@ bool PDBParser::Initialize() {
         m_lastError = L"Failed to initialize COM";
         return false;
     }
+    m_comInitialized = true;
     return true;
 }
 
@@ -52,9 +59,23 @@ void PDBParser::Unload() {
     Cleanup();
 }
 
+bool PDBParser::IsCancelled() {
+    if (m_cancellationCallback && m_cancellationCallback()) {
+        m_cancelled = true;
+    }
+    return m_cancelled;
+}
+
+bool PDBParser::ReportProgress(int percent, const std::wstring& message) {
+    if (IsCancelled()) return false;
+    if (m_progressCallback) m_progressCallback(percent, message);
+    return !IsCancelled();
+}
+
 bool PDBParser::LoadPDB(const std::wstring& pdbPath) {
     Cleanup();
 
+    if (IsCancelled()) return false;
     HRESULT hr = NoRegCoCreate(L"msdia140.dll", _uuidof(DiaSource), _uuidof(IDiaDataSource), (void**)&m_pDataSource);
     
     if (FAILED(hr)) {
@@ -66,18 +87,21 @@ bool PDBParser::LoadPDB(const std::wstring& pdbPath) {
     }
 
     hr = m_pDataSource->loadDataFromPdb(pdbPath.c_str());
+    if (IsCancelled()) return false;
     if (FAILED(hr)) {
         m_lastError = L"Failed to load PDB file";
         return false;
     }
 
     hr = m_pDataSource->openSession(&m_pSession);
+    if (IsCancelled()) return false;
     if (FAILED(hr)) {
         m_lastError = L"Failed to open session";
         return false;
     }
 
     hr = m_pSession->get_globalScope(&m_pGlobal);
+    if (IsCancelled()) return false;
     if (FAILED(hr)) {
         m_lastError = L"Failed to get global scope";
         return false;
@@ -100,32 +124,18 @@ ModuleInfo PDBParser::ParseModule() {
         SysFreeString(bstrName);
     }
 
-    if (m_progressCallback) {
-        m_progressCallback(0, L"Parsing functions...");
-    }
+    if (!ReportProgress(0, L"Parsing functions...")) return moduleInfo;
     ParseFunctions(m_pGlobal, moduleInfo);
 
-    if (m_progressCallback) {
-        m_progressCallback(20, L"Parsing global variables...");
-    }
+    if (!ReportProgress(20, L"Parsing global variables...")) return moduleInfo;
     ParseGlobalVariables(m_pGlobal, moduleInfo);
 
-    if (m_progressCallback) {
-        m_progressCallback(40, L"Parsing classes...");
-    }
-    ParseClasses(m_pGlobal, moduleInfo);
+    if (!ReportProgress(40, L"Parsing classes...")) return moduleInfo;
 
-    if (m_progressCallback) {
-        m_progressCallback(66, L"Parsing structs and unions...");
-    }
-    ParseStructs(m_pGlobal, moduleInfo);
-    ParseUnions(m_pGlobal, moduleInfo);
+    ParseUdtSymbols(m_pGlobal, moduleInfo);
     ParseEnums(m_pGlobal, moduleInfo);
 
-    if (m_progressCallback) {
-        m_progressCallback(100, L"Complete");
-    }
-
+    if (!ReportProgress(100, L"Complete")) return moduleInfo;
     return moduleInfo;
 }
 
@@ -137,13 +147,16 @@ void PDBParser::ParseFunctions(IDiaSymbol* pGlobal, ModuleInfo& moduleInfo) {
     }
 
     IDiaSymbol* pSymbol = nullptr;
+    std::unordered_set<ULONGLONG> knownFunctionRvas;
     ULONG celt = 0;
-    while (SUCCEEDED(pEnumSymbols->Next(1, &pSymbol, &celt)) && celt == 1) {
+    while (!IsCancelled() && SUCCEEDED(pEnumSymbols->Next(1, &pSymbol, &celt)) && celt == 1) {
         FunctionInfo funcInfo;
         ParseFunctionDetails(pSymbol, funcInfo);
+        funcInfo.displaySignature = GenerateFunctionSignature(funcInfo);
         
         if (!funcInfo.name.empty() || !funcInfo.undecoratedName.empty()) {
             moduleInfo.functions.push_back(funcInfo);
+            if (funcInfo.rva != 0) knownFunctionRvas.insert(funcInfo.rva);
         }
         
         pSymbol->Release();
@@ -155,7 +168,7 @@ void PDBParser::ParseFunctions(IDiaSymbol* pGlobal, ModuleInfo& moduleInfo) {
     hr = pGlobal->findChildren(SymTagPublicSymbol, nullptr, nsNone, &pEnumPublic);
     if (SUCCEEDED(hr) && pEnumPublic) {
         IDiaSymbol* pPublicSymbol = nullptr;
-        while (SUCCEEDED(pEnumPublic->Next(1, &pPublicSymbol, &celt)) && celt == 1) {
+        while (!IsCancelled() && SUCCEEDED(pEnumPublic->Next(1, &pPublicSymbol, &celt)) && celt == 1) {
             BOOL isFunction = FALSE;
             if (SUCCEEDED(pPublicSymbol->get_function(&isFunction)) && isFunction) {
                 FunctionInfo funcInfo;
@@ -170,16 +183,11 @@ void PDBParser::ParseFunctions(IDiaSymbol* pGlobal, ModuleInfo& moduleInfo) {
                 pPublicSymbol->get_relativeVirtualAddress(&funcInfo.rva);
                 pPublicSymbol->get_virtualAddress(&funcInfo.virtualAddress);
                 pPublicSymbol->get_length(&funcInfo.size);
+                funcInfo.displaySignature = GenerateFunctionSignature(funcInfo);
                 
                 if (!funcInfo.name.empty() || !funcInfo.undecoratedName.empty()) {
-                    bool found = false;
-                    for (const auto& existing : moduleInfo.functions) {
-                        if (existing.rva == funcInfo.rva && existing.rva != 0) {
-                            found = true;
-                            break;
-                        }
-                    }
-                    if (!found) {
+                    const bool duplicate = funcInfo.rva != 0 && !knownFunctionRvas.insert(funcInfo.rva).second;
+                    if (!duplicate) {
                         moduleInfo.functions.push_back(funcInfo);
                     }
                 }
@@ -190,6 +198,34 @@ void PDBParser::ParseFunctions(IDiaSymbol* pGlobal, ModuleInfo& moduleInfo) {
     }
 }
 
+void PDBParser::ParseUdtSymbols(IDiaSymbol* pGlobal, ModuleInfo& moduleInfo) {
+    IDiaEnumSymbols* enumSymbols = nullptr;
+    HRESULT hr = pGlobal->findChildren(SymTagUDT, nullptr, nsNone, &enumSymbols);
+    if (FAILED(hr) || !enumSymbols) return;
+
+    IDiaSymbol* symbol = nullptr;
+    ULONG count = 0;
+    while (!IsCancelled() && SUCCEEDED(enumSymbols->Next(1, &symbol, &count)) && count == 1) {
+        std::wstring name = GetSymbolName(symbol);
+        if (!IsAnonymousTypeName(name)) {
+            DWORD udtKind = 0;
+            symbol->get_udtKind(&udtKind);
+            if (udtKind == UdtClass || udtKind == UdtStruct || udtKind == UdtUnion) {
+                ClassInfo classInfo{};
+                classInfo.isStruct = udtKind == UdtStruct;
+                classInfo.isUnion = udtKind == UdtUnion;
+                ParseClassDetails(symbol, classInfo);
+                if (classInfo.isUnion) moduleInfo.unions.push_back(std::move(classInfo));
+                else if (classInfo.isStruct) moduleInfo.structs.push_back(std::move(classInfo));
+                else moduleInfo.classes.push_back(std::move(classInfo));
+            }
+        }
+        symbol->Release();
+    }
+    enumSymbols->Release();
+}
+
+#if 0
 void PDBParser::ParseClasses(IDiaSymbol* pGlobal, ModuleInfo& moduleInfo) {
     IDiaEnumSymbols* pEnumSymbols = nullptr;
     HRESULT hr = pGlobal->findChildren(SymTagUDT, nullptr, nsNone, &pEnumSymbols);
@@ -199,7 +235,7 @@ void PDBParser::ParseClasses(IDiaSymbol* pGlobal, ModuleInfo& moduleInfo) {
 
     IDiaSymbol* pSymbol = nullptr;
     ULONG celt = 0;
-    while (SUCCEEDED(pEnumSymbols->Next(1, &pSymbol, &celt)) && celt == 1) {
+    while (!IsCancelled() && SUCCEEDED(pEnumSymbols->Next(1, &pSymbol, &celt)) && celt == 1) {
         DWORD udtKind = 0;
         pSymbol->get_udtKind(&udtKind);
         
@@ -226,7 +262,7 @@ void PDBParser::ParseStructs(IDiaSymbol* pGlobal, ModuleInfo& moduleInfo) {
 
     IDiaSymbol* pSymbol = nullptr;
     ULONG celt = 0;
-    while (SUCCEEDED(pEnumSymbols->Next(1, &pSymbol, &celt)) && celt == 1) {
+    while (!IsCancelled() && SUCCEEDED(pEnumSymbols->Next(1, &pSymbol, &celt)) && celt == 1) {
         DWORD udtKind = 0;
         pSymbol->get_udtKind(&udtKind);
         
@@ -253,7 +289,7 @@ void PDBParser::ParseUnions(IDiaSymbol* pGlobal, ModuleInfo& moduleInfo) {
 
     IDiaSymbol* pSymbol = nullptr;
     ULONG celt = 0;
-    while (SUCCEEDED(pEnumSymbols->Next(1, &pSymbol, &celt)) && celt == 1) {
+    while (!IsCancelled() && SUCCEEDED(pEnumSymbols->Next(1, &pSymbol, &celt)) && celt == 1) {
         DWORD udtKind = 0;
         pSymbol->get_udtKind(&udtKind);
         
@@ -271,6 +307,8 @@ void PDBParser::ParseUnions(IDiaSymbol* pGlobal, ModuleInfo& moduleInfo) {
     pEnumSymbols->Release();
 }
 
+#endif
+
 void PDBParser::ParseEnums(IDiaSymbol* pGlobal, ModuleInfo& moduleInfo) {
     IDiaEnumSymbols* pEnumSymbols = nullptr;
     HRESULT hr = pGlobal->findChildren(SymTagEnum, nullptr, nsNone, &pEnumSymbols);
@@ -280,7 +318,7 @@ void PDBParser::ParseEnums(IDiaSymbol* pGlobal, ModuleInfo& moduleInfo) {
 
     IDiaSymbol* pSymbol = nullptr;
     ULONG celt = 0;
-    while (SUCCEEDED(pEnumSymbols->Next(1, &pSymbol, &celt)) && celt == 1) {
+    while (!IsCancelled() && SUCCEEDED(pEnumSymbols->Next(1, &pSymbol, &celt)) && celt == 1) {
         EnumInfo enumInfo;
         enumInfo.name = GetSymbolName(pSymbol);
         
@@ -294,7 +332,7 @@ void PDBParser::ParseEnums(IDiaSymbol* pGlobal, ModuleInfo& moduleInfo) {
         if (SUCCEEDED(pSymbol->findChildren(SymTagData, nullptr, nsNone, &pEnumChildren)) && pEnumChildren) {
             IDiaSymbol* pChild = nullptr;
             ULONG celtChild = 0;
-            while (SUCCEEDED(pEnumChildren->Next(1, &pChild, &celtChild)) && celtChild == 1) {
+            while (!IsCancelled() && SUCCEEDED(pEnumChildren->Next(1, &pChild, &celtChild)) && celtChild == 1) {
                 EnumValueInfo valueInfo;
                 valueInfo.name = GetSymbolName(pChild);
                 
@@ -343,7 +381,7 @@ void PDBParser::ParseClassDetails(IDiaSymbol* pClass, ClassInfo& classInfo) {
     if (SUCCEEDED(pClass->findChildren(SymTagBaseClass, nullptr, nsNone, &pEnumBase)) && pEnumBase) {
         IDiaSymbol* pBase = nullptr;
         ULONG celt = 0;
-        while (SUCCEEDED(pEnumBase->Next(1, &pBase, &celt)) && celt == 1) {
+        while (!IsCancelled() && SUCCEEDED(pEnumBase->Next(1, &pBase, &celt)) && celt == 1) {
             BaseClassInfo baseInfo;
             baseInfo.name = GetSymbolName(pBase);
 
@@ -365,56 +403,181 @@ void PDBParser::ParseClassDetails(IDiaSymbol* pClass, ClassInfo& classInfo) {
         pEnumBase->Release();
     }
 
-    IDiaEnumSymbols* pEnumData = nullptr;
-    if (SUCCEEDED(pClass->findChildren(SymTagData, nullptr, nsNone, &pEnumData)) && pEnumData) {
-        IDiaSymbol* pData = nullptr;
-        ULONG celt = 0;
-        while (SUCCEEDED(pEnumData->Next(1, &pData, &celt)) && celt == 1) {
-            MemberVariableInfo memberInfo;
-            memberInfo.name = GetSymbolName(pData);
-
-            IDiaSymbol* pType = nullptr;
-            if (SUCCEEDED(pData->get_type(&pType)) && pType) {
-                memberInfo.type = GetTypeName(pType);
-                pType->Release();
-            }
-
-            LONG offset = 0;
-            pData->get_offset(&offset);
-            memberInfo.offset = offset;
-
-            DWORD access = 0;
-            pData->get_access(&access);
-            memberInfo.access = GetAccessType(access);
-
-            DWORD bitPos = 0;
-            pData->get_bitPosition(&bitPos);
-            memberInfo.bitPosition = bitPos;
-
-            ULONGLONG bitSize = 0;
-            pData->get_length(&bitSize);
-            memberInfo.bitSize = (DWORD)bitSize;
-
-            classInfo.members.push_back(memberInfo);
-            pData->Release();
-        }
-        pEnumData->Release();
-    }
+    ParseMemberVariables(pClass, classInfo.members);
 
     IDiaEnumSymbols* pEnumFunc = nullptr;
     if (SUCCEEDED(pClass->findChildren(SymTagFunction, nullptr, nsNone, &pEnumFunc)) && pEnumFunc) {
         IDiaSymbol* pFunc = nullptr;
         ULONG celt = 0;
-        while (SUCCEEDED(pEnumFunc->Next(1, &pFunc, &celt)) && celt == 1) {
-            classInfo.memberFunctions.push_back(GetSymbolName(pFunc));
+        int vtableIndex = 0;
+        while (!IsCancelled() && SUCCEEDED(pEnumFunc->Next(1, &pFunc, &celt)) && celt == 1) {
+            FunctionInfo functionInfo;
+            ParseFunctionDetails(pFunc, functionInfo);
+            classInfo.memberFunctions.push_back(functionInfo.name);
+            if (functionInfo.isVirtual) {
+                VirtualFunctionInfo virtualInfo;
+                virtualInfo.name = functionInfo.name;
+                virtualInfo.returnType = functionInfo.returnType;
+                virtualInfo.returnTypeRef = functionInfo.returnTypeRef;
+                virtualInfo.parameters = functionInfo.parameters;
+                virtualInfo.rva = functionInfo.rva;
+                virtualInfo.virtualAddress = functionInfo.virtualAddress;
+                virtualInfo.vtableIndex = vtableIndex++;
+                DWORD access = 0;
+                pFunc->get_access(&access);
+                virtualInfo.access = GetAccessType(access);
+                BOOL isPure = FALSE;
+                virtualInfo.isPure = SUCCEEDED(pFunc->get_pure(&isPure)) && isPure;
+                classInfo.virtualFunctions.push_back(std::move(virtualInfo));
+            }
             pFunc->Release();
         }
         pEnumFunc->Release();
     }
 
-    ParseVirtualFunctions(pClass, classInfo);
 }
 
+void PDBParser::ParseMemberVariables(IDiaSymbol* owner, std::vector<MemberVariableInfo>& members, int depth) {
+    if (!owner || depth > 32) return;
+    IDiaEnumSymbols* enumData = nullptr;
+    if (FAILED(owner->findChildren(SymTagData, nullptr, nsNone, &enumData)) || !enumData) return;
+
+    IDiaSymbol* data = nullptr;
+    ULONG count = 0;
+    while (!IsCancelled() && SUCCEEDED(enumData->Next(1, &data, &count)) && count == 1) {
+        MemberVariableInfo member;
+        member.name = GetSymbolName(data);
+        member.isAnonymous = IsAnonymousTypeName(member.name);
+        if (member.isAnonymous) member.name.clear();
+
+        IDiaSymbol* type = nullptr;
+        if (SUCCEEDED(data->get_type(&type)) && type) {
+            member.typeRef = BuildTypeRef(type, depth + 1);
+            member.type = PDBHeaderGenerator::RenderDeclaration(member.typeRef, L"");
+
+            DWORD typeTag = SymTagNull;
+            type->get_symTag(&typeTag);
+            if (typeTag == SymTagUDT && IsAnonymousTypeName(GetSymbolName(type))) {
+                member.isAnonymous = true;
+                member.name.clear();
+            }
+            if (member.isAnonymous && typeTag == SymTagUDT) {
+                DWORD udtKind = 0;
+                type->get_udtKind(&udtKind);
+                auto aggregate = std::make_shared<ClassInfo>();
+                aggregate->isUnion = udtKind == UdtUnion;
+                aggregate->isStruct = udtKind == UdtStruct;
+                type->get_length(&aggregate->size);
+                ParseMemberVariables(type, aggregate->members, depth + 1);
+                member.anonymousType = std::move(aggregate);
+            }
+            type->Release();
+        }
+
+        data->get_offset(&member.offset);
+        DWORD access = 0;
+        data->get_access(&access);
+        member.access = GetAccessType(access);
+        member.isBitfield = data->get_bitPosition(&member.bitPosition) == S_OK;
+        ULONGLONG bitSize = 0;
+        data->get_length(&bitSize);
+        member.bitSize = static_cast<DWORD>(bitSize);
+        members.push_back(std::move(member));
+        data->Release();
+    }
+    enumData->Release();
+}
+
+bool PDBParser::IsAnonymousTypeName(const std::wstring& name) const {
+    return name.empty() || name == L"anonymous" ||
+           name.find(L"<anonymous") != std::wstring::npos ||
+           name.find(L"<unnamed") != std::wstring::npos;
+}
+
+namespace {
+void ReadTypeQualifiers(IDiaSymbol* type, TypeRef& result) {
+    BOOL value = FALSE;
+    if (SUCCEEDED(type->get_constType(&value)) && value) result.isConst = true;
+    value = FALSE;
+    if (SUCCEEDED(type->get_volatileType(&value)) && value) result.isVolatile = true;
+    value = FALSE;
+    if (SUCCEEDED(type->get_RValueReference(&value)) && value) result.isRValueReference = true;
+}
+}
+
+TypeRef PDBParser::BuildTypeRef(IDiaSymbol* pType, int depth) {
+    TypeRef result;
+    if (!pType || depth > 64) {
+        result.kind = TypeRefKind::Named;
+        return result;
+    }
+
+    DWORD tag = SymTagNull;
+    pType->get_symTag(&tag);
+    ReadTypeQualifiers(pType, result);
+    if (tag == SymTagPointerType) {
+        BOOL isReference = FALSE;
+        pType->get_reference(&isReference);
+        result.kind = isReference ? TypeRefKind::Reference : TypeRefKind::Pointer;
+        IDiaSymbol* pointee = nullptr;
+        if (SUCCEEDED(pType->get_type(&pointee)) && pointee) {
+            result.child = std::make_shared<TypeRef>(BuildTypeRef(pointee, depth + 1));
+            pointee->Release();
+        }
+        return result;
+    }
+    if (tag == SymTagArrayType) {
+        result.kind = TypeRefKind::Array;
+        DWORD count = 0;
+        result.hasKnownArrayCount = SUCCEEDED(pType->get_count(&count));
+        result.arrayCount = count;
+        IDiaSymbol* element = nullptr;
+        if (SUCCEEDED(pType->get_type(&element)) && element) {
+            result.child = std::make_shared<TypeRef>(BuildTypeRef(element, depth + 1));
+            element->Release();
+        }
+        return result;
+    }
+    if (tag == SymTagFunctionType) {
+        result.kind = TypeRefKind::Function;
+        DWORD callingConvention = 0;
+        if (SUCCEEDED(pType->get_callingConvention(&callingConvention))) {
+            result.callingConvention = GetCallingConvention(callingConvention);
+        }
+        IDiaSymbol* returnType = nullptr;
+        if (SUCCEEDED(pType->get_type(&returnType)) && returnType) {
+            result.child = std::make_shared<TypeRef>(BuildTypeRef(returnType, depth + 1));
+            returnType->Release();
+        }
+
+        IDiaEnumSymbols* args = nullptr;
+        if (SUCCEEDED(pType->findChildren(SymTagFunctionArgType, nullptr, nsNone, &args)) && args) {
+            IDiaSymbol* arg = nullptr;
+            ULONG count = 0;
+            while (SUCCEEDED(args->Next(1, &arg, &count)) && count == 1) {
+                IDiaSymbol* argType = nullptr;
+                if (SUCCEEDED(arg->get_type(&argType)) && argType) {
+                    result.functionParameters.push_back(BuildTypeRef(argType, depth + 1));
+                    argType->Release();
+                }
+                arg->Release();
+            }
+            args->Release();
+        }
+        return result;
+    }
+
+    result.kind = TypeRefKind::Named;
+    if (tag == SymTagBaseType) {
+        result.name = GetTypeName(pType);
+    } else {
+        result.name = GetSymbolName(pType);
+        if (result.name.empty()) result.name = GetTypeName(pType);
+    }
+    return result;
+}
+
+#if 0
 void PDBParser::ParseVirtualFunctions(IDiaSymbol* pClass, ClassInfo& classInfo) {
     IDiaEnumSymbols* pEnumSymbols = nullptr;
     if (SUCCEEDED(pClass->findChildren(SymTagFunction, nullptr, nsNone, &pEnumSymbols)) && pEnumSymbols) {
@@ -422,7 +585,7 @@ void PDBParser::ParseVirtualFunctions(IDiaSymbol* pClass, ClassInfo& classInfo) 
         ULONG celt = 0;
         int vtableIndex = 0;
         
-        while (SUCCEEDED(pEnumSymbols->Next(1, &pSymbol, &celt)) && celt == 1) {
+        while (!IsCancelled() && SUCCEEDED(pEnumSymbols->Next(1, &pSymbol, &celt)) && celt == 1) {
             BOOL isVirtual = FALSE;
             if (SUCCEEDED(pSymbol->get_virtual(&isVirtual)) && isVirtual) {
                 VirtualFunctionInfo vfuncInfo;
@@ -459,6 +622,8 @@ void PDBParser::ParseVirtualFunctions(IDiaSymbol* pClass, ClassInfo& classInfo) 
     }
 }
 
+#endif
+
 void PDBParser::ParseFunctionDetails(IDiaSymbol* pFunction, FunctionInfo& funcInfo) {
     funcInfo.name = GetSymbolName(pFunction);
     funcInfo.undecoratedName = GetUndecoratedName(pFunction);
@@ -467,7 +632,8 @@ void PDBParser::ParseFunctionDetails(IDiaSymbol* pFunction, FunctionInfo& funcIn
     if (SUCCEEDED(pFunction->get_type(&pType)) && pType) {
         IDiaSymbol* pReturnType = nullptr;
         if (SUCCEEDED(pType->get_type(&pReturnType)) && pReturnType) {
-            funcInfo.returnType = GetTypeName(pReturnType);
+            funcInfo.returnTypeRef = BuildTypeRef(pReturnType);
+            funcInfo.returnType = PDBHeaderGenerator::RenderDeclaration(funcInfo.returnTypeRef, L"");
             pReturnType->Release();
         }
 
@@ -522,7 +688,7 @@ void PDBParser::ParseParameters(IDiaSymbol* pFunction, std::vector<ParameterInfo
     if (SUCCEEDED(pFunction->findChildren(SymTagData, nullptr, nsNone, &pEnumSymbols)) && pEnumSymbols) {
         IDiaSymbol* pData = nullptr;
         ULONG celt = 0;
-        while (SUCCEEDED(pEnumSymbols->Next(1, &pData, &celt)) && celt == 1) {
+        while (!IsCancelled() && SUCCEEDED(pEnumSymbols->Next(1, &pData, &celt)) && celt == 1) {
             DWORD dataKind = 0;
             if (SUCCEEDED(pData->get_dataKind(&dataKind)) && dataKind == DataIsParam) {
                 ParameterInfo paramInfo;
@@ -537,7 +703,8 @@ void PDBParser::ParseParameters(IDiaSymbol* pFunction, std::vector<ParameterInfo
 
                 IDiaSymbol* pType = nullptr;
                 if (SUCCEEDED(pData->get_type(&pType)) && pType) {
-                    paramInfo.type = GetTypeName(pType);
+                    paramInfo.typeRef = BuildTypeRef(pType);
+                    paramInfo.type = PDBHeaderGenerator::RenderDeclaration(paramInfo.typeRef, L"");
                     pType->Release();
                 }
 
@@ -555,7 +722,7 @@ void PDBParser::ParseParameters(IDiaSymbol* pFunction, std::vector<ParameterInfo
             IDiaSymbol* pArg = nullptr;
             ULONG celt = 0;
             int index = 0;
-            while (SUCCEEDED(pEnumArgs->Next(1, &pArg, &celt)) && celt == 1) {
+            while (!IsCancelled() && SUCCEEDED(pEnumArgs->Next(1, &pArg, &celt)) && celt == 1) {
                 ParameterInfo paramInfo;
                 
                 std::wstringstream ss;
@@ -564,7 +731,8 @@ void PDBParser::ParseParameters(IDiaSymbol* pFunction, std::vector<ParameterInfo
 
                 IDiaSymbol* pType = nullptr;
                 if (SUCCEEDED(pArg->get_type(&pType)) && pType) {
-                    paramInfo.type = GetTypeName(pType);
+                    paramInfo.typeRef = BuildTypeRef(pType);
+                    paramInfo.type = PDBHeaderGenerator::RenderDeclaration(paramInfo.typeRef, L"");
                     pType->Release();
                 }
 
@@ -609,28 +777,7 @@ std::wstring PDBParser::GetTypeName(IDiaSymbol* pType) {
     DWORD symTag = 0;
     pType->get_symTag(&symTag);
 
-    if (symTag == SymTagPointerType) {
-        IDiaSymbol* pBaseType = nullptr;
-        if (SUCCEEDED(pType->get_type(&pBaseType)) && pBaseType) {
-            std::wstring baseName = GetTypeName(pBaseType);
-            pBaseType->Release();
-            return baseName + L"*";
-        }
-    }
-    else if (symTag == SymTagArrayType) {
-        IDiaSymbol* pBaseType = nullptr;
-        if (SUCCEEDED(pType->get_type(&pBaseType)) && pBaseType) {
-            std::wstring baseName = GetTypeName(pBaseType);
-            pBaseType->Release();
-            
-            DWORD count = 0;
-            pType->get_count(&count);
-            std::wstringstream ss;
-            ss << baseName << L"[" << count << L"]";
-            return ss.str();
-        }
-    }
-    else if (symTag == SymTagBaseType) {
+    if (symTag == SymTagBaseType) {
         DWORD baseType = 0;
         pType->get_baseType(&baseType);
         
@@ -748,13 +895,10 @@ std::wstring PDBParser::GenerateFunctionSignature(const FunctionInfo& funcInfo) 
         if (i > 0) {
             ss << L", ";
         }
-        if (!funcInfo.parameters[i].type.empty()) {
-            ss << funcInfo.parameters[i].type;
-            if (!funcInfo.parameters[i].name.empty()) {
-                ss << L" " << funcInfo.parameters[i].name;
-            }
-        } else if (!funcInfo.parameters[i].name.empty()) {
+        if (funcInfo.parameters[i].typeRef.kind == TypeRefKind::Named && funcInfo.parameters[i].typeRef.name.empty()) {
             ss << funcInfo.parameters[i].name;
+        } else {
+            ss << PDBHeaderGenerator::RenderDeclaration(funcInfo.parameters[i].typeRef, funcInfo.parameters[i].name);
         }
     }
     
@@ -772,7 +916,7 @@ void PDBParser::ParseGlobalVariables(IDiaSymbol* pGlobal, ModuleInfo& moduleInfo
 
     IDiaSymbol* pSymbol = nullptr;
     ULONG celt = 0;
-    while (SUCCEEDED(pEnumSymbols->Next(1, &pSymbol, &celt)) && celt == 1) {
+    while (!IsCancelled() && SUCCEEDED(pEnumSymbols->Next(1, &pSymbol, &celt)) && celt == 1) {
         DWORD dataKind = 0;
         if (SUCCEEDED(pSymbol->get_dataKind(&dataKind)) && dataKind == DataIsGlobal) {
             GlobalVariableInfo varInfo;
@@ -780,7 +924,8 @@ void PDBParser::ParseGlobalVariables(IDiaSymbol* pGlobal, ModuleInfo& moduleInfo
 
             IDiaSymbol* pType = nullptr;
             if (SUCCEEDED(pSymbol->get_type(&pType)) && pType) {
-                varInfo.type = GetTypeName(pType);
+                varInfo.typeRef = BuildTypeRef(pType);
+                varInfo.type = PDBHeaderGenerator::RenderDeclaration(varInfo.typeRef, L"");
                 pType->Release();
             }
 

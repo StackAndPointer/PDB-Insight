@@ -1,7 +1,3 @@
-//{{NO_DEPENDENCIES}}
-// Microsoft Visual C++ generated include file.
-// Used by PDBViewer.rc
-//
 #ifndef RESOURCE_H
 #define RESOURCE_H
 
@@ -36,9 +32,46 @@
 #define IDC_IDA_COMPATIBLE              2019
 #define IDR_LANG_ZH_CN                  2020
 #define IDR_LANG_EN_US                  2021
-#define ID_MENU_SETTINGS                3000
-#define ID_MENU_OPEN_DLL                3001
-#define ID_MENU_OPEN_CACHE              40001
+
+#define ID_MENU_OPEN                    2001
+#define ID_MENU_EXPORT_CSV              2002
+#define ID_MENU_EXPORT_XML              2003
+#define ID_MENU_EXPORT_FUNCTIONS_CSV    2004
+#define ID_MENU_EXPORT_CLASSES_CSV      2005
+#define ID_MENU_EXPORT_HEADER           2006
+#define ID_MENU_EXPORT_ALL_HEADERS      2007
+#define ID_MENU_EXIT                    2008
+#define ID_MENU_EXPORT_ENUMS_H          2009
+#define ID_MENU_CLOSE                   2010
+#define ID_MENU_OPEN_DLL                2011
+#define ID_MENU_SETTINGS                2012
+#define ID_EDIT_COPY                    2013
+
+#define ID_BUTTON_CLEAR_SEARCH          1108
+#define ID_BUTTON_CANCEL_TASK           1109
+
+#define ID_TREEVIEW                     1001
+#define ID_TABCTRL                      1002
+#define ID_LISTVIEW                     1003
+#define ID_RICHEDIT                     1004
+#define ID_STATUSBAR                    1005
+#define ID_EDIT_SEARCH                  1006
+#define ID_BUTTON_SEARCH                1007
+#define ID_BUTTON_SEARCH_HISTORY        3011
+#define ID_BUTTON_COPY_HEADER           1110
+
+#define ID_EXPAND_BASE_CLASSES          3004
+#define ID_LANGUAGE_ZH_CN               3005
+#define ID_LANGUAGE_EN_US               3006
+#define ID_ASSOCIATE_PDB                3007
+#define ID_UNASSOCIATE_PDB              3008
+#define ID_NUMBER_HEX                   3101
+#define ID_NUMBER_DEC                   3102
+#define ID_NUMBER_BOTH                  3103
+
+#define ID_SEARCH_HISTORY_FIRST         4000
+#define ID_SEARCH_HISTORY_LAST          4099
+#define ID_CLEAR_SEARCH_HISTORY         4100
 
 // Next default values for new objects
 // 
@@ -51,4 +84,4 @@
 #endif
 #endif
 
-#endif // RESOURCE_H
+#endif

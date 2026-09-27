@@ -4,6 +4,8 @@
 #include <sstream>
 #include <iomanip>
 #include <fstream>
+#include <algorithm>
+#include <cwctype>
 
 #pragma comment(lib, "wininet.lib")
 
@@ -12,7 +14,12 @@ PDBDownloader& PDBDownloader::GetInstance() {
     return instance;
 }
 
-PDBDownloadResult PDBDownloader::DownloadPDBForDll(const std::wstring& dllPath, const std::wstring& outputPath, std::function<void(int, const std::wstring&)> progressCallback) {
+PDBDownloadResult PDBDownloader::DownloadPDBForDll(const std::wstring& dllPath, const std::wstring& outputPath, std::function<void(int, const std::wstring&)> progressCallback, std::function<bool()> cancellationCallback) {
+    if (cancellationCallback && cancellationCallback()) {
+        PDBDownloadResult cancelledResult;
+        cancelledResult.cancelled = true;
+        return cancelledResult;
+    }
     PDBDownloadResult result;
     
     if (progressCallback) {
@@ -47,12 +54,13 @@ PDBDownloadResult PDBDownloader::DownloadPDBForDll(const std::wstring& dllPath, 
         progressCallback(20, L"Connecting to Microsoft symbol server...");
     }
     
-    if (DownloadFile(url, targetPath, progressCallback)) {
+    if (DownloadFile(url, targetPath, progressCallback, cancellationCallback)) {
         result.success = true;
         result.pdbPath = targetPath;
     }
     else {
-        result.errorMessage = L"Failed to download PDB file from Microsoft symbol server";
+        result.cancelled = cancellationCallback && cancellationCallback();
+        result.errorMessage = result.cancelled ? L"Cancelled" : L"Failed to download PDB file from Microsoft symbol server";
     }
     
     return result;
@@ -91,7 +99,7 @@ std::wstring PDBDownloader::BuildMicrosoftSymbolUrl(const std::wstring& pdbName,
     return url;
 }
 
-bool PDBDownloader::DownloadFile(const std::wstring& url, const std::wstring& localPath, std::function<void(int, const std::wstring&)> progressCallback) {
+bool PDBDownloader::DownloadFile(const std::wstring& url, const std::wstring& localPath, std::function<void(int, const std::wstring&)> progressCallback, std::function<bool()> cancellationCallback) {
     HINTERNET hInternet = InternetOpenW(L"PDBInsight", INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
     if (!hInternet) {
         return false;
@@ -111,6 +119,9 @@ bool PDBDownloader::DownloadFile(const std::wstring& url, const std::wstring& lo
         InternetCloseHandle(hInternet);
         return false;
     }
+    DWORD timeout = 15000;
+    InternetSetOptionW(hUrl, INTERNET_OPTION_CONNECT_TIMEOUT, &timeout, sizeof(timeout));
+    InternetSetOptionW(hUrl, INTERNET_OPTION_RECEIVE_TIMEOUT, &timeout, sizeof(timeout));
     
     DWORD contentLength = 0;
     DWORD contentLengthSize = sizeof(contentLength);
@@ -128,10 +139,26 @@ bool PDBDownloader::DownloadFile(const std::wstring& url, const std::wstring& lo
     DWORD totalBytesRead = 0;
     bool success = true;
     
-    while (InternetReadFile(hUrl, buffer, sizeof(buffer), &bytesRead) && bytesRead > 0) {
+    while (true) {
+        if (!InternetReadFile(hUrl, buffer, sizeof(buffer), &bytesRead)) {
+            success = false;
+            break;
+        }
+        if (bytesRead == 0) break;
+        if (cancellationCallback && cancellationCallback()) {
+            outFile.close();
+            InternetCloseHandle(hUrl);
+            InternetCloseHandle(hInternet);
+            DeleteFileW(localPath.c_str());
+            return false;
+        }
         outFile.write(buffer, bytesRead);
         totalBytesRead += bytesRead;
         
+        if (cancellationCallback && cancellationCallback()) {
+            success = false;
+            break;
+        }
         if (progressCallback && hasContentLength && contentLength > 0) {
             int percent = 30 + (int)((double)totalBytesRead / contentLength * 70);
             std::wstring status = L"Downloading... " + std::to_wstring(percent) + L"% (" + std::to_wstring(totalBytesRead / 1024) + L" KB)";
@@ -142,10 +169,9 @@ bool PDBDownloader::DownloadFile(const std::wstring& url, const std::wstring& lo
             progressCallback(50, status);
         }
         
-        MSG msg;
-        while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
-            TranslateMessage(&msg);
-            DispatchMessage(&msg);
+        if (cancellationCallback && cancellationCallback()) {
+            success = false;
+            break;
         }
     }
     
@@ -153,11 +179,11 @@ bool PDBDownloader::DownloadFile(const std::wstring& url, const std::wstring& lo
     InternetCloseHandle(hUrl);
     InternetCloseHandle(hInternet);
     
-    if (progressCallback) {
-        progressCallback(100, L"Download complete");
-    }
     
-    return outFile.good();
+    if (!success) {
+        DeleteFileW(localPath.c_str());
+    }
+    return success && outFile.good();
 }
 
 std::wstring PDBDownloader::GetPdbFileNameFromDll(const std::wstring& dllPath) {
@@ -288,7 +314,7 @@ std::wstring PDBDownloader::FormatGuidForUrl(const std::wstring& guid, DWORD age
     
     std::wstring result = ss.str();
     for (size_t i = 0; i < result.length(); i++) {
-        result[i] = toupper(result[i]);
+        result[i] = static_cast<wchar_t>(towupper(result[i]));
     }
     
     return result;

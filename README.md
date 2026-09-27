@@ -14,10 +14,6 @@ A powerful, lightweight PDB (Program Database) viewer tool based on Win32 API an
 
 ![Header View](screenshots/header_view.png)
 
-**Export Settings**
-
-![Export Settings](screenshots/export_settings.png)
-
 ---
 
 ## Features
@@ -45,7 +41,7 @@ A powerful, lightweight PDB (Program Database) viewer tool based on Win32 API an
 
 ### Search Function
 
-- Symbol search with fuzzy matching
+- Case-insensitive symbol search with result counts
 - Search history
 - Search history dropdown menu
 
@@ -88,7 +84,7 @@ Examples:
 ### User Interface
 
 - Resizable splitter
-- Status bar with loading progress and download status
+- Dedicated task progress and cancellation controls
 - Keyboard shortcuts
 - Right-click menu
 - Drag & drop file opening (PDB, DLL, EXE)
@@ -178,6 +174,10 @@ PDBViewer/
 | Ctrl+O | Open PDB file |
 | Ctrl+C | Copy selected content |
 | Ctrl+F | Search |
+| Enter | Run the current search |
+| Escape | Clear the search box |
+| Tab / Shift+Tab | Move between controls |
+| Arrow keys | Resize the focused splitter |
 
 ### Right-Click Menu
 

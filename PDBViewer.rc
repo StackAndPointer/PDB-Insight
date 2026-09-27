@@ -55,13 +55,20 @@ BEGIN
     IDS_APP_TITLE           "PDB Insight"
 END
 
+IDC_PDBVIEWER ACCELERATORS
+BEGIN
+    "O", ID_MENU_OPEN, VIRTKEY, CONTROL
+    "F", ID_EDIT_SEARCH, VIRTKEY, CONTROL
+    "C", ID_EDIT_COPY, VIRTKEY, CONTROL
+END
+
 /////////////////////////////////////////////////////////////////////////////
 //
 // Version
 //
 
 1 VERSIONINFO
- FILEVERSION 1,2,0,0
+ FILEVERSION 1,3,0,0
  PRODUCTVERSION 1,2,0,0
  FILEFLAGSMASK 0x3fL
 #ifdef _DEBUG

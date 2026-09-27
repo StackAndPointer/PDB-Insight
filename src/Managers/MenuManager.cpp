@@ -16,9 +16,9 @@ void ShowOffsetModeMenu(HWND hWnd, int x, int y)
     else if (g_numberMode == NUMBER_DEC) flagsDec |= MF_CHECKED;
     else if (g_numberMode == NUMBER_BOTH) flagsBoth |= MF_CHECKED;
     
-    AppendMenuW(hMenu, flagsHex, ID_NUMBER_HEX, L"数值 - 十六进制(Hex)");
-    AppendMenuW(hMenu, flagsDec, ID_NUMBER_DEC, L"数值 - 十进制(Dec)");
-    AppendMenuW(hMenu, flagsBoth, ID_NUMBER_BOTH, L"数值 - 两者都显示");
+    AppendMenuW(hMenu, flagsHex, ID_NUMBER_HEX, LANG_STR(L"menu_number_hex").c_str());
+    AppendMenuW(hMenu, flagsDec, ID_NUMBER_DEC, LANG_STR(L"menu_number_dec").c_str());
+    AppendMenuW(hMenu, flagsBoth, ID_NUMBER_BOTH, LANG_STR(L"menu_number_both").c_str());
     
     POINT pt = { x, y };
     if (x == -1 && y == -1) {
@@ -105,7 +105,11 @@ void RefreshLanguage(HWND hWnd)
     RebuildMenu(hWnd);
     
     SetWindowTextW(hButtonSearch, LanguageManager::GetInstance().GetString(L"button_search", L"搜索").c_str());
-    SetWindowTextW(hButtonSearchHistory, LanguageManager::GetInstance().GetString(L"button_search_history", L"▼").c_str());
+    SetWindowTextW(hButtonSearchHistory, L"▼");
+    if (hButtonCopyHeader) SetWindowTextW(hButtonCopyHeader, LANG_STR(L"menu_copy").c_str());
+    SetWindowTextW(hButtonCancelTask, LANG_STR(L"button_cancel_task").c_str());
+    SendMessageW(hEditSearch, EM_SETCUEBANNER, TRUE, reinterpret_cast<LPARAM>(LANG_STR(L"search_placeholder").c_str()));
+    UpdateControlTooltips();
     
     wcscpy_s(g_szTabText1, LanguageManager::GetInstance().GetString(L"tab_details", L"详细信息").c_str());
     wcscpy_s(g_szTabText2, LanguageManager::GetInstance().GetString(L"tab_header", L"头文件视图").c_str());
@@ -118,11 +122,6 @@ void RefreshLanguage(HWND hWnd)
     TabCtrl_SetItem(hTabCtrl, 1, &tci);
     
     UpdateStatusBar(LanguageManager::GetInstance().GetString(L"status_ready", L"就绪 - 请打开一个 PDB 文件"));
-    
-    // 更新提示文本
-    if (hInfoText) {
-        SetWindowTextW(hInfoText, LanguageManager::GetInstance().GetString(L"info_export_hint", L"如果符号信息查看不全请导出后查看").c_str());
-    }
     
     if (g_pdbLoaded) {
         PopulateTreeView();
@@ -185,7 +184,7 @@ void AutoAssociatePDBFiles()
 void AssociatePDBFiles(HWND hWnd)
 {
     AutoAssociatePDBFiles();
-    MessageBoxW(hWnd, L"PDB 文件关联成功！", L"提示", MB_OK | MB_ICONINFORMATION);
+    MessageBoxW(hWnd, LANG_STR(L"status_associate_success").c_str(), LANG_STR(L"msg_info").c_str(), MB_OK | MB_ICONINFORMATION);
 }
 
 void UnassociatePDBFiles(HWND hWnd)
@@ -208,5 +207,5 @@ void UnassociatePDBFiles(HWND hWnd)
     RegDeleteTreeW(HKEY_CURRENT_USER, L"Software\\Classes\\PDB Insight.PDBFile");
 
     SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
-    MessageBoxW(hWnd, L"已取消 PDB 文件关联！", L"提示", MB_OK | MB_ICONINFORMATION);
+    MessageBoxW(hWnd, LANG_STR(L"status_unassociate_success").c_str(), LANG_STR(L"msg_info").c_str(), MB_OK | MB_ICONINFORMATION);
 }

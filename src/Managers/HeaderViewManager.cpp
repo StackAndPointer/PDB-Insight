@@ -2,6 +2,7 @@
 #include "FontManager.h"
 #include "TreeNodeHelper.h"
 #include <set>
+#include <unordered_set>
 
 void ShowHeaderView(HTREEITEM hItem)
 {
@@ -202,11 +203,8 @@ void ShowHeaderView(HTREEITEM hItem)
             std::wostringstream ss;
             ss << L"// Auto-generated class/struct definition\r\n\r\n";
             
-            ExportSettings settings;
+            ExportSettings settings = ConfigManager::GetInstance().GetExportSettings();
             settings.flattenNamespaces = false;
-            settings.removeVoidParams = false;
-            settings.idaCompatible = false;
-            settings.includeEnumsInEnumsH = false;
             
             if (pClass->isUnion) {
                 ss << PDBHeaderGenerator::GenerateUnionDeclaration(*pClass, settings, g_numberMode, g_expandBaseClasses, &g_moduleInfo);
@@ -282,7 +280,7 @@ void ShowHeaderView(HTREEITEM hItem)
             const auto& var = g_moduleInfo.globalVariables[idx];
             std::wostringstream ss;
             ss << L"// Global Variable Declaration\r\n\r\n";
-            ss << var.type << L" " << var.name << L";\r\n\r\n";
+            ss << PDBHeaderGenerator::RenderDeclaration(var.typeRef, var.name) << L";\r\n\r\n";
             ss << L"// Additional Information:\r\n";
             if (var.rva != 0)
             {
@@ -301,7 +299,8 @@ void ShowHeaderView(HTREEITEM hItem)
     }
 
     SetWindowTextW(hRichEdit, content.c_str());
-    ApplySyntaxHighlighting(hRichEdit);
+    const auto spans = BuildSyntaxSpans(content);
+    ApplySyntaxHighlighting(hRichEdit, content, spans);
 }
 
 void SetRichEditRangeColor(HWND hRichEdit, LONG start, LONG end, COLORREF color)
@@ -312,7 +311,8 @@ void SetRichEditRangeColor(HWND hRichEdit, LONG start, LONG end, COLORREF color)
     cf.dwMask = CFM_COLOR;
     cf.crTextColor = color;
 
-    SendMessageW(hRichEdit, EM_SETSEL, start, end);
+    CHARRANGE range{start, end};
+    SendMessageW(hRichEdit, EM_EXSETSEL, 0, reinterpret_cast<LPARAM>(&range));
     SendMessageW(hRichEdit, EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM)&cf);
 }
 
@@ -330,14 +330,11 @@ void SetRichEditRangeBold(HWND hRichEdit, LONG start, LONG end)
 
 void ApplySyntaxHighlighting(HWND hRichEdit) {
     if (!hRichEdit) return;
-
     GETTEXTLENGTHEX gtle;
     gtle.flags = GTL_NUMCHARS;
     gtle.codepage = 1200;
     LONG textLen = (LONG)SendMessageW(hRichEdit, EM_GETTEXTLENGTHEX, (WPARAM)&gtle, 0);
-    if (textLen <= 0) {
-        return;
-    }
+    if (textLen <= 0) return;
 
     std::vector<WCHAR> buffer(textLen + 1);
     GETTEXTEX gt;
@@ -347,7 +344,15 @@ void ApplySyntaxHighlighting(HWND hRichEdit) {
     gt.lpDefaultChar = NULL;
     gt.lpUsedDefChar = NULL;
     SendMessageW(hRichEdit, EM_GETTEXTEX, (WPARAM)&gt, (LPARAM)buffer.data());
-    std::wstring text(buffer.data());
+    const std::wstring text(buffer.data());
+    const auto spans = BuildSyntaxSpans(text);
+    ApplySyntaxHighlighting(hRichEdit, text, spans);
+}
+
+void ApplySyntaxHighlighting(HWND hRichEdit, const std::wstring& sourceText) {
+    if (!hRichEdit) return;
+    const std::wstring& text = sourceText;
+    if (text.empty()) return;
 
     const COLORREF COLOR_KEYWORD = RGB(0, 0, 255);
     const COLORREF COLOR_COMMENT = RGB(0, 128, 0);
@@ -355,17 +360,16 @@ void ApplySyntaxHighlighting(HWND hRichEdit) {
     const COLORREF COLOR_TYPE = RGB(43, 145, 175);
     const COLORREF COLOR_DEFAULT = RGB(0, 0, 0);
 
-    static const std::vector<std::wstring> keywords = {
+    static const std::unordered_set<std::wstring> keywords = {
         L"class", L"struct", L"union", L"public", L"protected", L"private",
-        L"void", L"int", L"char", L"bool", L"float", L"double", L"long", L"short",
-        L"unsigned", L"signed", L"const", L"static", L"virtual", L"inline", L"explicit",
+        L"const", L"static", L"virtual", L"inline", L"explicit",
         L"if", L"else", L"for", L"while", L"do", L"switch", L"case", L"default",
         L"break", L"continue", L"return", L"true", L"false", L"NULL", L"nullptr",
         L"typedef", L"enum", L"template", L"typename", L"namespace", L"using",
         L"new", L"delete", L"this", L"friend", L"operator", L"sizeof", L"typeid"
     };
 
-    static const std::set<std::wstring> basicTypes = {
+    static const std::unordered_set<std::wstring> basicTypes = {
         L"void", L"int", L"char", L"bool", L"float", L"double", L"long", L"short",
         L"unsigned", L"signed", L"const", L"static", L"virtual", L"inline", L"explicit",
         L"wchar_t", L"char16_t", L"char32_t", L"int8_t", L"int16_t", L"int32_t", L"int64_t",
@@ -375,7 +379,7 @@ void ApplySyntaxHighlighting(HWND hRichEdit) {
         L"LPCWSTR", L"HANDLE", L"HWND", L"HINSTANCE", L"HMODULE", L"HDWP", L"HRGN"
     };
 
-    std::set<std::wstring> typeNames;
+    std::unordered_set<std::wstring> typeNames = basicTypes;
     if (g_pdbLoaded) {
         for (const auto& cls : g_moduleInfo.classes) {
             typeNames.insert(cls.name);
@@ -393,6 +397,11 @@ void ApplySyntaxHighlighting(HWND hRichEdit) {
             typeNames.insert(enm.name);
             typeNames.insert(PDBHeaderGenerator::FlattenName(enm.name));
         }
+    }
+    std::vector<std::wstring> typeNamesSnapshot(typeNames.begin(), typeNames.end());
+    for (const auto& type : typeNamesSnapshot) {
+        const size_t templatePos = type.find(L'<');
+        if (templatePos != std::wstring::npos) typeNames.insert(type.substr(0, templatePos));
     }
 
     SendMessageW(hRichEdit, WM_SETREDRAW, FALSE, 0);
@@ -466,20 +475,11 @@ void ApplySyntaxHighlighting(HWND hRichEdit) {
                 wordEnd++;
             }
             std::wstring word = text.substr(pos, wordEnd - pos);
-            
-            bool isKeyword = false;
-            for (const auto& kw : keywords) {
-                if (word == kw) {
-                    isKeyword = true;
-                    break;
-                }
-            }
-            if (isKeyword) {
+
+            if (keywords.find(word) != keywords.end()) {
                 keywordsFound.push_back({pos, wordEnd});
-            } else {
-                if (typeNames.find(word) != typeNames.end()) {
-                    typesFound.push_back({pos, wordEnd});
-                }
+            } else if (typeNames.find(word) != typeNames.end()) {
+                typesFound.push_back({pos, wordEnd});
             }
             pos = wordEnd;
             continue;

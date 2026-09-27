@@ -1,21 +1,141 @@
-#include "ControlsManager.h"
+﻿#include "ControlsManager.h"
 #include "TreeViewManager.h"
 #include "ListViewManager.h"
 #include "HeaderViewManager.h"
 #include "SearchManager.h"
 #include "FontManager.h"
 #include "DPIManager.h"
+#include <memory>
 #include <set>
+#include <uxtheme.h>
 
-LRESULT CALLBACK SplitterProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
-{
-    switch (message)
-    {
+#pragma comment(lib, "uxtheme.lib")
+
+namespace {
+WCHAR g_searchTooltip[128] = L"";
+WCHAR g_clearTooltip[128] = L"";
+WCHAR g_historyTooltip[128] = L"";
+
+constexpr int kGap = 6;
+constexpr int kTopHeight = 36;
+constexpr int kSplitterWidth = 6;
+
+int SplitterMinimum() {
+    return DPIManager::ScaleX(180);
+}
+
+int SplitterMaximum(HWND hWnd) {
+    RECT rect{};
+    GetClientRect(hWnd, &rect);
+    return max(SplitterMinimum(), rect.right - DPIManager::ScaleX(320));
+}
+
+void ClampSplitter(HWND hWnd) {
+    g_splitterPos = max(SplitterMinimum(), min(g_splitterPos, SplitterMaximum(hWnd)));
+}
+
+void MoveSplitter(HWND hWnd, int delta) {
+    g_splitterPos += delta;
+    ClampSplitter(hWnd);
+    LayoutMainWindow(GetParent(hWnd));
+}
+
+void CopySelectedListCell() {
+    int item = ListView_GetNextItem(hListView, -1, LVNI_SELECTED);
+    if (item < 0) return;
+
+    WCHAR buffer[4096] = L"";
+    LVITEMW lvi{};
+    lvi.iItem = item;
+    lvi.iSubItem = g_lastClickedSubItem;
+    lvi.mask = LVIF_TEXT;
+    lvi.pszText = buffer;
+    lvi.cchTextMax = _countof(buffer);
+    ListView_GetItem(hListView, &lvi);
+
+    std::wstring selectedText = buffer;
+    if (!OpenClipboard(g_hMainWindow)) return;
+    EmptyClipboard();
+    HGLOBAL memory = GlobalAlloc(GMEM_MOVEABLE, (selectedText.size() + 1) * sizeof(WCHAR));
+    if (memory) {
+        auto data = static_cast<WCHAR*>(GlobalLock(memory));
+        if (data) {
+            wcscpy_s(data, selectedText.size() + 1, selectedText.c_str());
+            GlobalUnlock(memory);
+            SetClipboardData(CF_UNICODETEXT, memory);
+        } else {
+            GlobalFree(memory);
+        }
+    }
+    CloseClipboard();
+}
+
+void SearchSelectedListCell() {
+    int item = ListView_GetNextItem(hListView, -1, LVNI_SELECTED);
+    if (item < 0) {
+        SetFocus(hEditSearch);
+        return;
+    }
+
+    WCHAR buffer[4096] = L"";
+    LVITEMW lvi{};
+    lvi.iItem = item;
+    lvi.iSubItem = g_lastClickedSubItem;
+    lvi.mask = LVIF_TEXT;
+    lvi.pszText = buffer;
+    lvi.cchTextMax = _countof(buffer);
+    ListView_GetItem(hListView, &lvi);
+    SetWindowTextW(hEditSearch, buffer);
+    SearchItems(buffer);
+}
+
+void AddTooltip(HWND tool, const WCHAR* text, UINT id) {
+    TOOLINFOW info{};
+    info.cbSize = sizeof(info);
+    info.hwnd = tool;
+    info.uId = id;
+    info.uFlags = TTF_SUBCLASS | TTF_IDISHWND;
+    info.lpszText = const_cast<WCHAR*>(text);
+    GetClientRect(tool, &info.rect);
+    SendMessageW(hTooltip, TTM_ADDTOOL, 0, reinterpret_cast<LPARAM>(&info));
+}
+
+void UpdateTooltipText(HWND tool, UINT id, WCHAR* buffer, size_t capacity, const std::wstring& text) {
+    wcscpy_s(buffer, capacity, text.c_str());
+    TOOLINFOW info{};
+    info.cbSize = sizeof(info);
+    info.hwnd = tool;
+    info.uId = id;
+    info.uFlags = TTF_SUBCLASS | TTF_IDISHWND;
+    info.lpszText = buffer;
+    GetClientRect(tool, &info.rect);
+    SendMessageW(hTooltip, TTM_UPDATETIPTEXT, 0, reinterpret_cast<LPARAM>(&info));
+}
+}
+
+LRESULT CALLBACK ClearButtonProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
+    LRESULT result = CallWindowProcW(g_pOldClearButtonProc, hWnd, message, wParam, lParam);
+    if (message == BM_CLICK || message == WM_LBUTTONUP ||
+        message == WM_LBUTTONDOWN ||
+        (message == WM_KEYUP && (wParam == VK_SPACE || wParam == VK_RETURN))) {
+        HWND edit = GetDlgItem(GetParent(hWnd), ID_EDIT_SEARCH);
+        if (edit) SetWindowTextW(edit, L"");
+        ClearSearchBox();
+    }
+    return result;
+}
+
+LRESULT CALLBACK SplitterProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
+    switch (message) {
     case WM_SETCURSOR:
-        SetCursor(LoadCursor(NULL, IDC_SIZEWE));
+        SetCursor(LoadCursor(nullptr, IDC_SIZEWE));
         return TRUE;
+    case WM_SETFOCUS:
+        InvalidateRect(hWnd, nullptr, TRUE);
+        return 0;
     case WM_LBUTTONDOWN:
         g_splitterDragging = true;
+        SetFocus(hWnd);
         SetCapture(hWnd);
         return 0;
     case WM_LBUTTONUP:
@@ -24,443 +144,460 @@ LRESULT CALLBACK SplitterProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPa
             ReleaseCapture();
         }
         return 0;
+    case WM_CAPTURECHANGED:
+        g_splitterDragging = false;
+        return 0;
     case WM_MOUSEMOVE:
         if (g_splitterDragging) {
-            POINT pt;
-            GetCursorPos(&pt);
-            HWND hParent = GetParent(hWnd);
-            ScreenToClient(hParent, &pt);
-            g_splitterPos = pt.x;
-            UpdateSplitterPosition(hParent);
+            POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+            ClientToScreen(hWnd, &pt);
+            ScreenToClient(GetParent(hWnd), &pt);
+            g_splitterPos = pt.x - kSplitterWidth / 2;
+            ClampSplitter(GetParent(hWnd));
+            LayoutMainWindow(GetParent(hWnd));
         }
         return 0;
-    }
-    return CallWindowProc(g_pOldSplitterProc, hWnd, message, wParam, lParam);
-}
-
-LRESULT CALLBACK ListViewProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
-{
-    if (message == WM_KEYDOWN)
-    {
-        if (GetKeyState(VK_CONTROL) < 0)
-        {
-            if (wParam == 'C')
-            {
-                int iItem = ListView_GetNextItem(hListView, -1, LVNI_SELECTED);
-                if (iItem != -1)
-                {
-                    LVITEM lvi;
-                    lvi.iItem = iItem;
-                    lvi.iSubItem = g_lastClickedSubItem;
-                    lvi.mask = LVIF_TEXT;
-                    WCHAR szText[1024];
-                    lvi.pszText = szText;
-                    lvi.cchTextMax = 1024;
-                    ListView_GetItem(hListView, &lvi);
-                    std::wstring selectedText = szText;
-
-                    if (OpenClipboard(NULL)) {
-                        EmptyClipboard();
-                        HGLOBAL hGlobal = GlobalAlloc(GMEM_MOVEABLE, (selectedText.length() + 1) * sizeof(WCHAR));
-                        if (hGlobal) {
-                            LPWSTR pData = (LPWSTR)GlobalLock(hGlobal);
-                            if (pData) {
-                                wcscpy_s(pData, selectedText.length() + 1, selectedText.c_str());
-                                GlobalUnlock(hGlobal);
-                                SetClipboardData(CF_UNICODETEXT, hGlobal);
-                            }
-                        }
-                        CloseClipboard();
-                    }
-                }
-                return 0;
-            }
-            else if (wParam == 'F')
-            {
-                int iItem = ListView_GetNextItem(hListView, -1, LVNI_SELECTED);
-                if (iItem != -1)
-                {
-                    LVITEM lvi;
-                    lvi.iItem = iItem;
-                    lvi.iSubItem = g_lastClickedSubItem;
-                    lvi.mask = LVIF_TEXT;
-                    WCHAR szText[1024];
-                    lvi.pszText = szText;
-                    lvi.cchTextMax = 1024;
-                    ListView_GetItem(hListView, &lvi);
-                    std::wstring selectedText = szText;
-
-                    SetWindowTextW(hEditSearch, selectedText.c_str());
-                    SearchItems(selectedText);
-                }
-                else
-                {
-                    SetFocus(hEditSearch);
-                }
-                return 0;
-            }
+    case WM_GETDLGCODE:
+        return DLGC_WANTARROWS | DLGC_WANTCHARS;
+    case WM_KEYDOWN:
+        if (wParam == VK_LEFT) {
+            MoveSplitter(hWnd, -DPIManager::ScaleX(16));
+            return 0;
         }
-    }
-    else if (message == WM_LBUTTONDOWN || message == WM_RBUTTONDOWN)
-    {
-        POINT pt;
-        pt.x = LOWORD(lParam);
-        pt.y = HIWORD(lParam);
-        LVHITTESTINFO hti;
-        ZeroMemory(&hti, sizeof(hti));
-        hti.pt = pt;
-        ListView_SubItemHitTest(hListView, &hti);
-        g_lastClickedSubItem = (hti.iSubItem >= 0) ? hti.iSubItem : 0;
-    }
-    return CallWindowProc(g_pOldListViewProc, hWnd, message, wParam, lParam);
-}
-
-void UpdateSplitterPosition(HWND hWnd)
-{
-    RECT rect;
-    GetClientRect(hWnd, &rect);
-    int statusBarHeight = DPIManager::ScaleY(24);
-    int searchBarHeight = DPIManager::ScaleY(30);
-    int controlTop = searchBarHeight;
-    int controlHeight = rect.bottom - rect.top - statusBarHeight - searchBarHeight;
-
-    int minWidth = DPIManager::ScaleX(100);
-    int maxWidth = rect.right - rect.left - DPIManager::ScaleX(200);
-    
-    // 确保splitter位置在合理范围内
-    if (g_splitterPos < minWidth || g_splitterPos > maxWidth) {
-        // 如果splitter位置不合理，设置为默认值
+        if (wParam == VK_RIGHT) {
+            MoveSplitter(hWnd, DPIManager::ScaleX(16));
+            return 0;
+        }
+        if (wParam == VK_HOME) {
+            g_splitterPos = SplitterMinimum();
+            LayoutMainWindow(GetParent(hWnd));
+            return 0;
+        }
+        if (wParam == VK_END) {
+            g_splitterPos = SplitterMaximum(GetParent(hWnd));
+            LayoutMainWindow(GetParent(hWnd));
+            return 0;
+        }
+        break;
+    case WM_LBUTTONDBLCLK:
+        RECT rect{};
+        GetClientRect(GetParent(hWnd), &rect);
         g_splitterPos = rect.right / 3;
-    }
-
-    SetWindowPos(hTreeView, nullptr, 0, controlTop, g_splitterPos, controlHeight, SWP_NOZORDER);
-    SetWindowPos(hSplitter, nullptr, g_splitterPos, controlTop, DPIManager::ScaleX(4), controlHeight, SWP_NOZORDER);
-    SetWindowPos(hTabCtrl, nullptr, g_splitterPos + DPIManager::ScaleX(4), controlTop, (rect.right - rect.left) - (g_splitterPos + DPIManager::ScaleX(4)), controlHeight, SWP_NOZORDER);
-
-    RECT tabRect;
-    GetClientRect(hTabCtrl, &tabRect);
-    TabCtrl_AdjustRect(hTabCtrl, FALSE, &tabRect);
-    SetWindowPos(hListView, nullptr, tabRect.left, tabRect.top, tabRect.right - tabRect.left, tabRect.bottom - tabRect.top, SWP_NOZORDER);
-    SetWindowPos(hRichEdit, nullptr, tabRect.left, tabRect.top, tabRect.right - tabRect.left, tabRect.bottom - tabRect.top, SWP_NOZORDER);
-
-    // 调整提示文本控件位置
-    if (hInfoText) {
-        SetWindowPos(hInfoText, nullptr, 0, rect.bottom - statusBarHeight - DPIManager::ScaleY(20), rect.right - rect.left, DPIManager::ScaleY(20), SWP_NOZORDER);
-    }
-}
-
-LRESULT CALLBACK RichEditProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
-{
-    if (message == WM_CONTEXTMENU)
-    {
-        POINT pt;
-        pt.x = LOWORD(lParam);
-        pt.y = HIWORD(lParam);
-        ShowRichEditContextMenu(hWnd, pt.x, pt.y);
+        LayoutMainWindow(GetParent(hWnd));
         return 0;
     }
-    else if (message == WM_KEYDOWN)
-    {
-        if (GetKeyState(VK_CONTROL) < 0)
-        {
-            if (wParam == 'C')
-            {
-                SendMessageW(hWnd, WM_COPY, 0, 0);
-                return 0;
-            }
-            else if (wParam == 'F')
-            {
-                CHARRANGE cr;
-                SendMessageW(hWnd, EM_EXGETSEL, 0, (LPARAM)&cr);
-                if (cr.cpMin != cr.cpMax)
-                {
-                    GETTEXTLENGTHEX gtle;
-                    gtle.flags = GTL_NUMCHARS;
-                    gtle.codepage = 1200;
-                    LONG textLen = (LONG)SendMessageW(hWnd, EM_GETTEXTLENGTHEX, (WPARAM)&gtle, 0);
-                    if (textLen > 0)
-                    {
-                        std::vector<WCHAR> buffer(textLen + 1);
-                        GETTEXTEX gt;
-                        gt.cb = (textLen + 1) * sizeof(WCHAR);
-                        gt.flags = GT_DEFAULT;
-                        gt.codepage = 1200;
-                        gt.lpDefaultChar = NULL;
-                        gt.lpUsedDefChar = NULL;
-                        SendMessageW(hWnd, EM_GETTEXTEX, (WPARAM)&gt, (LPARAM)buffer.data());
-                        std::wstring text(buffer.data());
-                        std::wstring selectedText = text.substr(cr.cpMin, cr.cpMax - cr.cpMin);
-                        SetWindowTextW(hEditSearch, selectedText.c_str());
-                        SearchItems(selectedText);
-                    }
-                }
-                else
-                {
-                    SetFocus(hEditSearch);
-                }
-                return 0;
-            }
-        }
-    }
-    else if (message == WM_LBUTTONDBLCLK)
-    {
-        CallWindowProc(g_pOldRichEditProc, hWnd, message, wParam, lParam);
-        
-        CHARRANGE cr;
-        SendMessageW(hWnd, EM_EXGETSEL, 0, (LPARAM)&cr);
-        
-        GETTEXTLENGTHEX gtle;
-        gtle.flags = GTL_NUMCHARS;
-        gtle.codepage = 1200;
-        LONG textLen = (LONG)SendMessageW(hWnd, EM_GETTEXTLENGTHEX, (WPARAM)&gtle, 0);
-        
-        if (textLen > 0 && cr.cpMin != cr.cpMax)
-        {
-            std::vector<WCHAR> buffer(textLen + 1);
-            GETTEXTEX gt;
-            gt.cb = (textLen + 1) * sizeof(WCHAR);
-            gt.flags = GT_DEFAULT;
-            gt.codepage = 1200;
-            gt.lpDefaultChar = NULL;
-            gt.lpUsedDefChar = NULL;
-            SendMessageW(hWnd, EM_GETTEXTEX, (WPARAM)&gt, (LPARAM)buffer.data());
-            std::wstring text(buffer.data());
-            
-            while (cr.cpMax > cr.cpMin && 
-                   (text[cr.cpMax - 1] == L' ' || text[cr.cpMax - 1] == L'\t' || text[cr.cpMax - 1] == L'\r' || text[cr.cpMax - 1] == L'\n'))
-            {
-                cr.cpMax--;
-            }
-            
-            if (cr.cpMin != cr.cpMax)
-            {
-                SendMessageW(hWnd, EM_EXSETSEL, 0, (LPARAM)&cr);
-            }
-        }
-        return 0;
-    }
-    return CallWindowProc(g_pOldRichEditProc, hWnd, message, wParam, lParam);
+    return CallWindowProcW(g_pOldSplitterProc, hWnd, message, wParam, lParam);
 }
 
-void ShowRichEditContextMenu(HWND hWnd, int x, int y)
-{
+LRESULT CALLBACK ListViewProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
+    if (message == WM_KEYDOWN && GetKeyState(VK_CONTROL) < 0) {
+        if (wParam == 'C') {
+            CopySelectedListCell();
+            return 0;
+        }
+        if (wParam == 'F') {
+            SearchSelectedListCell();
+            return 0;
+        }
+    }
+    if (message == WM_LBUTTONDOWN || message == WM_RBUTTONDOWN) {
+        LVHITTESTINFO hit{};
+        hit.pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+        ListView_SubItemHitTest(hListView, &hit);
+        g_lastClickedSubItem = hit.iSubItem >= 0 ? hit.iSubItem : 0;
+    }
+    if (message == WM_CONTEXTMENU) {
+        ShowListViewContextMenu(GetParent(hWnd), GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
+        return 0;
+    }
+    return CallWindowProcW(g_pOldListViewProc, hWnd, message, wParam, lParam);
+}
+
+namespace {
+bool g_richEditSelecting = false;
+LONG g_richEditSelectionAnchor = 0;
+
+LONG RichEditCharFromPoint(HWND hWnd, LPARAM lParam) {
+    POINT point{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+    LRESULT index = SendMessageW(hWnd, EM_CHARFROMPOS, 0, reinterpret_cast<LPARAM>(&point));
+    LONG length = GetWindowTextLengthW(hWnd);
+    return max(0L, min(static_cast<LONG>(index), length));
+}
+}
+
+LRESULT CALLBACK RichEditProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
+    if (message == WM_LBUTTONDOWN) {
+        SetFocus(hWnd);
+        LRESULT result = CallWindowProcW(g_pOldRichEditProc, hWnd, message, wParam, lParam);
+        g_richEditSelectionAnchor = RichEditCharFromPoint(hWnd, lParam);
+        g_richEditSelecting = true;
+        if (GetCapture() != hWnd) SetCapture(hWnd);
+        SendMessageW(hWnd, EM_SETSEL, g_richEditSelectionAnchor, g_richEditSelectionAnchor);
+        return result;
+    }
+    if (message == WM_MOUSEMOVE && g_richEditSelecting) {
+        LRESULT result = CallWindowProcW(g_pOldRichEditProc, hWnd, message, wParam, lParam);
+        LONG current = RichEditCharFromPoint(hWnd, lParam);
+        LONG begin = min(g_richEditSelectionAnchor, current);
+        LONG end = max(g_richEditSelectionAnchor, current);
+        SendMessageW(hWnd, EM_SETSEL, begin, end);
+        return result;
+    }
+    if (message == WM_LBUTTONUP || message == WM_CAPTURECHANGED || message == WM_CANCELMODE) {
+        LRESULT result = CallWindowProcW(g_pOldRichEditProc, hWnd, message, wParam, lParam);
+        g_richEditSelecting = false;
+        if (message == WM_LBUTTONUP && GetCapture() == hWnd) ReleaseCapture();
+        return result;
+    }
+    if (message == WM_RBUTTONDOWN) {
+        POINT screenPoint{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+        ClientToScreen(hWnd, &screenPoint);
+        ShowRichEditContextMenu(GetParent(hWnd), screenPoint.x, screenPoint.y);
+        return 0;
+    }
+    if (message == WM_CONTEXTMENU) {
+        ShowRichEditContextMenu(GetParent(hWnd), GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
+        return 0;
+    }
+    if (message == WM_KEYDOWN && GetKeyState(VK_CONTROL) < 0) {
+        if (wParam == 'C') {
+            SendMessageW(hWnd, WM_COPY, 0, 0);
+            return 0;
+        }
+        if (wParam == 'F') {
+            CHARRANGE selection{};
+            SendMessageW(hWnd, EM_EXGETSEL, 0, reinterpret_cast<LPARAM>(&selection));
+            if (selection.cpMin != selection.cpMax) {
+                int length = GetWindowTextLengthW(hWnd);
+                std::wstring text(static_cast<size_t>(length) + 1, L'\0');
+                GetWindowTextW(hWnd, &text[0], length + 1);
+                text.resize(length);
+                std::wstring selected = text.substr(selection.cpMin, selection.cpMax - selection.cpMin);
+                SetWindowTextW(hEditSearch, selected.c_str());
+                SearchItems(selected);
+            } else {
+                SetFocus(hEditSearch);
+            }
+            return 0;
+        }
+    }
+    return CallWindowProcW(g_pOldRichEditProc, hWnd, message, wParam, lParam);
+}
+
+void ShowRichEditContextMenu(HWND hWnd, int x, int y) {
     if (!hRichEdit) return;
+    CHARRANGE selection{};
+    SendMessageW(hRichEdit, EM_EXGETSEL, 0, reinterpret_cast<LPARAM>(&selection));
+    bool hasSelection = selection.cpMin != selection.cpMax;
 
-    HMENU hMenu = CreatePopupMenu();
+    HMENU menu = CreatePopupMenu();
+    AppendMenuW(menu, hasSelection ? MF_ENABLED : MF_GRAYED, 1001, LANG_STR(L"menu_copy").c_str());
+    AppendMenuW(menu, hasSelection ? MF_ENABLED : MF_GRAYED, 1003, LANG_STR(L"menu_search").c_str());
 
-    CHARRANGE cr;
-    SendMessageW(hRichEdit, EM_EXGETSEL, 0, (LPARAM)&cr);
-    bool hasSelection = (cr.cpMin != cr.cpMax);
+    POINT pt{x, y};
+    if (x == -1 && y == -1) GetCursorPos(&pt);
+    int command = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_NONOTIFY, pt.x, pt.y, 0, hWnd, nullptr);
+    DestroyMenu(menu);
 
-    AppendMenuW(hMenu, hasSelection ? MF_ENABLED : MF_GRAYED, 1001, L"复制");
-    AppendMenuW(hMenu, hasSelection ? MF_ENABLED : MF_GRAYED, 1003, L"搜索");
-
-    POINT pt = { x, y };
-    if (x == -1 && y == -1) {
-        GetCursorPos(&pt);
-    }
-
-    int cmd = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_NONOTIFY, pt.x, pt.y, 0, hWnd, nullptr);
-    DestroyMenu(hMenu);
-
-    if (cmd == 1001) {
+    if (command == 1001) {
         SendMessageW(hRichEdit, WM_COPY, 0, 0);
-    }
-    else if (cmd == 1003) {
-        if (hasSelection) {
-            GETTEXTLENGTHEX gtle;
-            gtle.flags = GTL_NUMCHARS;
-            gtle.codepage = 1200;
-            LONG textLen = (LONG)SendMessageW(hRichEdit, EM_GETTEXTLENGTHEX, (WPARAM)&gtle, 0);
-            if (textLen > 0) {
-                std::vector<WCHAR> buffer(textLen + 1);
-                GETTEXTEX gt;
-                gt.cb = (textLen + 1) * sizeof(WCHAR);
-                gt.flags = GT_DEFAULT;
-                gt.codepage = 1200;
-                gt.lpDefaultChar = NULL;
-                gt.lpUsedDefChar = NULL;
-                SendMessageW(hRichEdit, EM_GETTEXTEX, (WPARAM)&gt, (LPARAM)buffer.data());
-                std::wstring text(buffer.data());
-                std::wstring selectedText = text.substr(cr.cpMin, cr.cpMax - cr.cpMin);
-                SetWindowTextW(hEditSearch, selectedText.c_str());
-                SearchItems(selectedText);
-            }
-        }
+    } else if (command == 1003 && hasSelection) {
+        int length = GetWindowTextLengthW(hRichEdit);
+        std::wstring text(static_cast<size_t>(length) + 1, L'\0');
+        GetWindowTextW(hRichEdit, &text[0], length + 1);
+        text.resize(length);
+        std::wstring selected = text.substr(selection.cpMin, selection.cpMax - selection.cpMin);
+        SetWindowTextW(hEditSearch, selected.c_str());
+        SearchItems(selected);
     }
 }
 
-void CreateControls(HWND hWnd)
-{
-    RECT rect;
-    GetClientRect(hWnd, &rect);
+void ShowListViewContextMenu(HWND hWnd, int x, int y) {
+    if (!hListView || ListView_GetNextItem(hListView, -1, LVNI_SELECTED) < 0) return;
 
-    int statusBarHeight = 24;
-    int searchBarHeight = 30;
-    int controlTop = searchBarHeight;
-    int controlHeight = rect.bottom - rect.top - statusBarHeight - searchBarHeight;
-    g_splitterPos = rect.right / 3;
+    HMENU menu = CreatePopupMenu();
+    AppendMenuW(menu, MF_ENABLED, 2001, LANG_STR(L"menu_copy").c_str());
+    AppendMenuW(menu, MF_ENABLED, 2002, LANG_STR(L"menu_search").c_str());
 
-    hEditSearch = CreateWindowExW(0, L"EDIT", L"",
-        WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL,
-        10, 5, 300, 24, hWnd, (HMENU)ID_EDIT_SEARCH, hInst, nullptr);
+    POINT pt{x, y};
+    if (x == -1 && y == -1) GetCursorPos(&pt);
+    int command = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_NONOTIFY, pt.x, pt.y, 0, hWnd, nullptr);
+    DestroyMenu(menu);
 
-    g_pOldEditProc = (WNDPROC)SetWindowLongPtrW(hEditSearch, GWLP_WNDPROC, (LONG_PTR)SearchEditProc);
+    if (command == 2001) CopySelectedListCell();
+    if (command == 2002) SearchSelectedListCell();
+}
 
-    hButtonSearch = CreateWindowExW(0, L"BUTTON", LanguageManager::GetInstance().GetString(L"button_search", L"搜索").c_str(),
-        WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-        320, 5, 80, 24, hWnd, (HMENU)ID_BUTTON_SEARCH, hInst, nullptr);
-    SendMessageW(hButtonSearch, WM_SETFONT, (WPARAM)FontManager::GetHeaderViewFont(), TRUE);
+void CreateControls(HWND hWnd) {
+    g_hMainWindow = hWnd;
 
-    hButtonSearchHistory = CreateWindowExW(0, L"BUTTON", LanguageManager::GetInstance().GetString(L"button_search_history", L"▼").c_str(),
-        WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-        410, 5, 30, 24, hWnd, (HMENU)ID_BUTTON_SEARCH_HISTORY, hInst, nullptr);
-    SendMessageW(hButtonSearchHistory, WM_SETFONT, (WPARAM)FontManager::GetHeaderViewFont(), TRUE);
+    hTooltip = CreateWindowExW(0, TOOLTIPS_CLASSW, nullptr,
+        WS_POPUP | TTS_ALWAYSTIP | TTS_NOPREFIX, 0, 0, 0, 0, hWnd, nullptr, hInst, nullptr);
+
+    hEditSearch = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"",
+        WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL | ES_WANTRETURN,
+        0, 0, 0, 0, hWnd, reinterpret_cast<HMENU>(static_cast<UINT_PTR>(ID_EDIT_SEARCH)), hInst, nullptr);
+    g_pOldEditProc = reinterpret_cast<WNDPROC>(SetWindowLongPtrW(hEditSearch, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(SearchEditProc)));
+
+    hButtonClearSearch = CreateWindowExW(0, L"BUTTON", L"×",
+        WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
+        0, 0, 0, 0, hWnd, reinterpret_cast<HMENU>(static_cast<UINT_PTR>(ID_BUTTON_CLEAR_SEARCH)), hInst, nullptr);
+    g_pOldClearButtonProc = reinterpret_cast<WNDPROC>(SetWindowLongPtrW(
+        hButtonClearSearch, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(ClearButtonProc)));
+
+    hButtonSearch = CreateWindowExW(0, L"BUTTON", LANG_STR(L"button_search").c_str(),
+        WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON,
+        0, 0, 0, 0, hWnd, reinterpret_cast<HMENU>(static_cast<UINT_PTR>(ID_BUTTON_SEARCH)), hInst, nullptr);
+
+    hButtonSearchHistory = CreateWindowExW(0, L"BUTTON", L"▼",
+        WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
+        0, 0, 0, 0, hWnd, reinterpret_cast<HMENU>(static_cast<UINT_PTR>(ID_BUTTON_SEARCH_HISTORY)), hInst, nullptr);
+
+    hProgressTask = CreateWindowExW(0, PROGRESS_CLASSW, nullptr,
+        WS_CHILD | PBS_SMOOTH,
+        0, 0, 0, 0, hWnd, nullptr, hInst, nullptr);
+    SendMessageW(hProgressTask, PBM_SETRANGE32, 0, 100);
+
+    hButtonCancelTask = CreateWindowExW(0, L"BUTTON", LANG_STR(L"button_cancel_task").c_str(),
+        WS_CHILD | WS_TABSTOP | BS_PUSHBUTTON,
+        0, 0, 0, 0, hWnd, reinterpret_cast<HMENU>(static_cast<UINT_PTR>(ID_BUTTON_CANCEL_TASK)), hInst, nullptr);
 
     hTreeView = CreateWindowExW(0, WC_TREEVIEWW, L"",
-        WS_CHILD | WS_VISIBLE | WS_BORDER | TVS_HASLINES | TVS_HASBUTTONS | TVS_LINESATROOT | WS_VSCROLL,
-        0, controlTop, g_splitterPos, controlHeight, hWnd, (HMENU)ID_TREEVIEW, hInst, nullptr);
+        WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_BORDER | TVS_HASLINES | TVS_HASBUTTONS | TVS_LINESATROOT | WS_VSCROLL,
+        0, 0, 0, 0, hWnd, reinterpret_cast<HMENU>(static_cast<UINT_PTR>(ID_TREEVIEW)), hInst, nullptr);
 
     hSplitter = CreateWindowExW(0, L"STATIC", L"",
-        WS_CHILD | WS_VISIBLE | SS_NOTIFY,
-        g_splitterPos, controlTop, 4, controlHeight, hWnd, nullptr, hInst, nullptr);
-    g_pOldSplitterProc = (WNDPROC)SetWindowLongPtrW(hSplitter, GWLP_WNDPROC, (LONG_PTR)SplitterProc);
+        WS_CHILD | WS_VISIBLE | WS_TABSTOP | SS_NOTIFY,
+        0, 0, 0, 0, hWnd, nullptr, hInst, nullptr);
+    g_pOldSplitterProc = reinterpret_cast<WNDPROC>(SetWindowLongPtrW(hSplitter, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(SplitterProc)));
 
     hTabCtrl = CreateWindowExW(0, WC_TABCONTROLW, L"",
-        WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS,
-        g_splitterPos + 4, controlTop, rect.right - g_splitterPos - 4, controlHeight, hWnd, (HMENU)ID_TABCTRL, hInst, nullptr);
+        WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_CLIPSIBLINGS,
+        0, 0, 0, 0, hWnd, reinterpret_cast<HMENU>(static_cast<UINT_PTR>(ID_TABCTRL)), hInst, nullptr);
 
-    TCITEM tci;
-    wcscpy_s(g_szTabText1, LanguageManager::GetInstance().GetString(L"tab_details", L"详细信息").c_str());
-    wcscpy_s(g_szTabText2, LanguageManager::GetInstance().GetString(L"tab_header", L"头文件视图").c_str());
-    tci.mask = TCIF_TEXT;
-    tci.pszText = g_szTabText1;
-    TabCtrl_InsertItem(hTabCtrl, 0, &tci);
-    tci.pszText = g_szTabText2;
-    TabCtrl_InsertItem(hTabCtrl, 1, &tci);
-
-    RECT tabRect;
-    GetClientRect(hTabCtrl, &tabRect);
-    TabCtrl_AdjustRect(hTabCtrl, FALSE, &tabRect);
+    wcscpy_s(g_szTabText1, LANG_STR(L"tab_details").c_str());
+    wcscpy_s(g_szTabText2, LANG_STR(L"tab_header").c_str());
+    TCITEM item{};
+    item.mask = TCIF_TEXT;
+    item.pszText = g_szTabText1;
+    TabCtrl_InsertItem(hTabCtrl, 0, &item);
+    item.pszText = g_szTabText2;
+    TabCtrl_InsertItem(hTabCtrl, 1, &item);
 
     hListView = CreateWindowExW(0, WC_LISTVIEWW, L"",
-        WS_CHILD | WS_VISIBLE | WS_BORDER | LVS_REPORT | LVS_SINGLESEL | WS_VSCROLL | WS_HSCROLL,
-        tabRect.left, tabRect.top, tabRect.right - tabRect.left, tabRect.bottom - tabRect.top,
-        hTabCtrl, (HMENU)ID_LISTVIEW, hInst, nullptr);
+        WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_BORDER | LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | WS_VSCROLL | WS_HSCROLL,
+        0, 0, 0, 0, hTabCtrl, reinterpret_cast<HMENU>(static_cast<UINT_PTR>(ID_LISTVIEW)), hInst, nullptr);
+    g_pOldListViewProc = reinterpret_cast<WNDPROC>(SetWindowLongPtrW(hListView, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(ListViewProc)));
 
-    g_pOldListViewProc = (WNDPROC)SetWindowLongPtrW(hListView, GWLP_WNDPROC, (LONG_PTR)ListViewProc);
-
-    hRichEdit = CreateWindowExW(0, RICHEDIT_CLASS, L"",
-        WS_CHILD | WS_BORDER | WS_VSCROLL | WS_HSCROLL | ES_MULTILINE | ES_READONLY | ES_AUTOVSCROLL | ES_AUTOHSCROLL,
-        tabRect.left, tabRect.top, tabRect.right - tabRect.left, tabRect.bottom - tabRect.top,
-        hTabCtrl, (HMENU)ID_RICHEDIT, hInst, nullptr);
-    
+    hRichEdit = CreateWindowExW(WS_EX_CLIENTEDGE, RICHEDIT_CLASSW, L"",
+        WS_CHILD | WS_TABSTOP | WS_VSCROLL | WS_HSCROLL | ES_MULTILINE | ES_READONLY | ES_AUTOVSCROLL | ES_AUTOHSCROLL | ES_NOHIDESEL,
+        0, 0, 0, 0, hTabCtrl, reinterpret_cast<HMENU>(static_cast<UINT_PTR>(ID_RICHEDIT)), hInst, nullptr);
+    g_pOldRichEditProc = reinterpret_cast<WNDPROC>(SetWindowLongPtrW(hRichEdit, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(RichEditProc)));
     ShowWindow(hRichEdit, SW_HIDE);
-    
-    g_pOldRichEditProc = (WNDPROC)SetWindowLongPtrW(hRichEdit, GWLP_WNDPROC, (LONG_PTR)RichEditProc);
-    
-    FontManager::ApplyHeaderViewFont(hRichEdit);
+    hButtonCopyHeader = CreateWindowExW(0, L"BUTTON", LANG_STR(L"menu_copy").c_str(),
+        WS_CHILD | WS_TABSTOP | BS_PUSHBUTTON, 0, 0, 0, 0, hWnd,
+        reinterpret_cast<HMENU>(static_cast<UINT_PTR>(ID_BUTTON_COPY_HEADER)), hInst, nullptr);
+    ShowWindow(hButtonCopyHeader, SW_HIDE);
 
-    ListView_SetExtendedListViewStyle(hListView, LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES);
+    ListView_SetExtendedListViewStyle(hListView, LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES | LVS_EX_DOUBLEBUFFER);
+    SetWindowTheme(hTreeView, L"Explorer", nullptr);
+    SetWindowTheme(hListView, L"Explorer", nullptr);
+    SetWindowTheme(hTabCtrl, L"Explorer", nullptr);
 
-    int statusParts[] = { -1 };
     hStatusBar = CreateWindowExW(0, STATUSCLASSNAMEW, L"",
-        WS_CHILD | WS_VISIBLE,
-        0, 0, 0, 0, hWnd, (HMENU)ID_STATUSBAR, hInst, nullptr);
-    SendMessage(hStatusBar, SB_SETPARTS, 1, (LPARAM)statusParts);
+        WS_CHILD | WS_VISIBLE | SBARS_SIZEGRIP,
+        0, 0, 0, 0, hWnd, reinterpret_cast<HMENU>(static_cast<UINT_PTR>(ID_STATUSBAR)), hInst, nullptr);
 
-    // 创建提示文本控件
-    hInfoText = CreateWindowExW(0, L"STATIC", LanguageManager::GetInstance().GetString(L"info_export_hint", L"如果符号信息查看不全请导出后查看").c_str(),
-        WS_CHILD | WS_VISIBLE | SS_CENTER,
-        0, 0, 0, 0, hWnd, (HMENU)ID_INFO_TEXT, hInst, nullptr);
-    SendMessageW(hInfoText, WM_SETFONT, (WPARAM)FontManager::GetHeaderViewFont(), TRUE);
-
-    UpdateStatusBar(LanguageManager::GetInstance().GetString(L"status_ready", L"就绪 - 请打开一个 PDB 文件"));
+    ApplyApplicationFonts();
+    FontManager::ApplyHeaderViewFont(hRichEdit);
+    UpdateControlTooltips();
+    AddTooltip(hEditSearch, g_searchTooltip, ID_EDIT_SEARCH);
+    AddTooltip(hButtonClearSearch, g_clearTooltip, ID_BUTTON_CLEAR_SEARCH);
+    AddTooltip(hButtonSearchHistory, g_historyTooltip, ID_BUTTON_SEARCH_HISTORY);
+    SendMessageW(hEditSearch, EM_SETCUEBANNER, TRUE, reinterpret_cast<LPARAM>(LANG_STR(L"search_placeholder").c_str()));
+    LayoutMainWindow(hWnd);
+    UpdateStatusBar(LANG_STR(L"status_ready"));
 }
 
-void UpdateStatusBar(const std::wstring& text)
-{
-    if (hStatusBar)
-    {
-        SendMessageW(hStatusBar, WM_SETTEXT, 0, (LPARAM)text.c_str());
+void ApplyApplicationFonts() {
+    HFONT uiFont = FontManager::GetDefaultFont();
+    HWND controls[] = {
+        hEditSearch, hButtonClearSearch, hButtonSearch, hButtonSearchHistory,
+        hButtonCopyHeader,
+        hButtonCancelTask, hTreeView, hTabCtrl, hListView, hStatusBar
+    };
+    for (HWND control : controls) {
+        if (control) SendMessageW(control, WM_SETFONT, reinterpret_cast<WPARAM>(uiFont), TRUE);
+    }
+    FontManager::ApplyHeaderViewFont(hRichEdit);
+}
+
+void UpdateControlTooltips() {
+    if (!hTooltip) return;
+    UpdateTooltipText(hEditSearch, ID_EDIT_SEARCH, g_searchTooltip, _countof(g_searchTooltip), LANG_STR(L"search_tooltip"));
+    UpdateTooltipText(hButtonClearSearch, ID_BUTTON_CLEAR_SEARCH, g_clearTooltip, _countof(g_clearTooltip), LANG_STR(L"clear_search"));
+    UpdateTooltipText(hButtonSearchHistory, ID_BUTTON_SEARCH_HISTORY, g_historyTooltip, _countof(g_historyTooltip), LANG_STR(L"search_history"));
+}
+
+void SetTaskMode(bool active) {
+    ShowWindow(hProgressTask, active ? SW_SHOW : SW_HIDE);
+    ShowWindow(hButtonCancelTask, active ? SW_SHOW : SW_HIDE);
+    ShowWindow(hEditSearch, active ? SW_HIDE : SW_SHOW);
+    ShowWindow(hButtonSearch, active ? SW_HIDE : SW_SHOW);
+    ShowWindow(hButtonSearchHistory, active ? SW_HIDE : SW_SHOW);
+    ShowWindow(hButtonClearSearch, active ? SW_HIDE : SW_SHOW);
+    if (active) SendMessageW(hProgressTask, PBM_SETPOS, 0, 0);
+    LayoutMainWindow(g_hMainWindow);
+}
+
+void ClearSearchBox() {
+    SendMessageW(hEditSearch, EM_SETSEL, 0, -1);
+    SendMessageW(hEditSearch, WM_CLEAR, 0, 0);
+    SetWindowTextW(hEditSearch, L"");
+    SetDlgItemTextW(g_hMainWindow, ID_EDIT_SEARCH, L"");
+    SendMessageW(hEditSearch, EM_SETSEL, 0, 0);
+    SearchItems(L"", false);
+}
+
+void UpdateSearchClearButton() {
+    if (!hButtonClearSearch) return;
+    ShowWindow(hButtonClearSearch, IsWindowVisible(hProgressTask) ? SW_HIDE : SW_SHOW);
+}
+
+void UpdateStatusBar(const std::wstring& text) {
+    if (hStatusBar) SendMessageW(hStatusBar, SB_SETTEXTW, 0, reinterpret_cast<LPARAM>(text.c_str()));
+}
+
+void LayoutMainWindow(HWND hWnd) {
+    if (!hWnd || !hTreeView || !hTabCtrl || !hStatusBar) return;
+
+    RECT rect{};
+    GetClientRect(hWnd, &rect);
+    SendMessageW(hStatusBar, WM_SIZE, 0, 0);
+    RECT statusRect{};
+    GetWindowRect(hStatusBar, &statusRect);
+    int statusHeight = statusRect.bottom - statusRect.top;
+    int margin = DPIManager::ScaleX(8);
+    int gap = DPIManager::ScaleX(kGap);
+    int topHeight = DPIManager::ScaleY(kTopHeight);
+    int contentBottom = max(topHeight, rect.bottom - statusHeight);
+
+    bool taskActive = IsWindowVisible(hProgressTask);
+    int clearWidth = DPIManager::ScaleX(32);
+    int searchWidth = DPIManager::ScaleX(82);
+    int historyWidth = DPIManager::ScaleX(34);
+    int cancelWidth = DPIManager::ScaleX(88);
+    int y = DPIManager::ScaleY(6);
+    int controlHeight = DPIManager::ScaleY(24);
+
+    if (taskActive) {
+        int progressWidth = max(DPIManager::ScaleX(180), rect.right - margin * 2 - cancelWidth - gap);
+        SetWindowPos(hProgressTask, nullptr, margin, y, progressWidth, controlHeight, SWP_NOZORDER);
+        SetWindowPos(hButtonCancelTask, nullptr, margin + progressWidth + gap, y, cancelWidth, controlHeight, SWP_NOZORDER);
+    } else {
+        int fixedWidth = clearWidth + searchWidth + historyWidth + gap * 3;
+        int editWidth = max(DPIManager::ScaleX(220), rect.right - margin * 2 - fixedWidth);
+        int x = margin;
+        SetWindowPos(hEditSearch, nullptr, x, y, editWidth, controlHeight, SWP_NOZORDER);
+        x += editWidth + gap;
+        SetWindowPos(hButtonClearSearch, nullptr, x, y, clearWidth, controlHeight, SWP_NOZORDER);
+        x += clearWidth + gap;
+        SetWindowPos(hButtonSearch, nullptr, x, y, searchWidth, controlHeight, SWP_NOZORDER);
+        x += searchWidth + gap;
+        SetWindowPos(hButtonSearchHistory, nullptr, x, y, historyWidth, controlHeight, SWP_NOZORDER);
+    }
+
+    ClampSplitter(hWnd);
+    int contentHeight = contentBottom - topHeight;
+    SetWindowPos(hTreeView, nullptr, 0, topHeight, g_splitterPos, contentHeight, SWP_NOZORDER);
+    SetWindowPos(hSplitter, nullptr, g_splitterPos, topHeight, kSplitterWidth, contentHeight, SWP_NOZORDER);
+    SetWindowPos(hTabCtrl, nullptr, g_splitterPos + kSplitterWidth, topHeight,
+        max(0, rect.right - g_splitterPos - kSplitterWidth), contentHeight, SWP_NOZORDER);
+
+    RECT tabRect{};
+    GetClientRect(hTabCtrl, &tabRect);
+    TabCtrl_AdjustRect(hTabCtrl, FALSE, &tabRect);
+    SetWindowPos(hListView, nullptr, tabRect.left, tabRect.top,
+        max(0, tabRect.right - tabRect.left), max(0, tabRect.bottom - tabRect.top), SWP_NOZORDER);
+    SetWindowPos(hRichEdit, nullptr, tabRect.left, tabRect.top,
+        max(0, tabRect.right - tabRect.left), max(0, tabRect.bottom - tabRect.top), SWP_NOZORDER);
+    RECT tabClient{};
+    GetClientRect(hTabCtrl, &tabClient);
+    POINT tabOrigin{tabClient.left, tabClient.top};
+    ClientToScreen(hTabCtrl, &tabOrigin);
+    ScreenToClient(hWnd, &tabOrigin);
+    const int copyButtonWidth = DPIManager::ScaleX(76);
+    SetWindowPos(hButtonCopyHeader, nullptr,
+        tabOrigin.x + max(0, tabClient.right - copyButtonWidth - DPIManager::ScaleX(4)),
+        tabOrigin.y + DPIManager::ScaleY(3), copyButtonWidth, DPIManager::ScaleY(24), SWP_NOZORDER);
+
+    ResizeListViewColumns();
+    UpdateTabViews(false);
+}
+
+void UpdateSplitterPosition(HWND hWnd) {
+    LayoutMainWindow(hWnd);
+}
+
+void UpdateTabViews(bool refreshContent) {
+    if (!hTabCtrl || !hListView || !hRichEdit) return;
+    int tabIndex = TabCtrl_GetCurSel(hTabCtrl);
+    ShowWindow(hListView, tabIndex == 0 ? SW_SHOW : SW_HIDE);
+    ShowWindow(hRichEdit, tabIndex == 0 ? SW_HIDE : SW_SHOW);
+    if (hButtonCopyHeader) ShowWindow(hButtonCopyHeader, tabIndex == 0 ? SW_HIDE : SW_SHOW);
+    if (!refreshContent) return;
+
+    HTREEITEM selected = TreeView_GetSelection(hTreeView);
+    if (!selected || !g_pdbLoaded) return;
+    if (tabIndex == 0) PopulateListView(selected);
+    else ShowHeaderView(selected);
+}
+
+void CopyHeaderText() {
+    if (!hRichEdit) return;
+
+    CHARRANGE selection{};
+    SendMessageW(hRichEdit, EM_EXGETSEL, 0, reinterpret_cast<LPARAM>(&selection));
+    const bool hadSelection = selection.cpMin != selection.cpMax;
+    if (!hadSelection) {
+        SendMessageW(hRichEdit, EM_SETSEL, 0, -1);
+    }
+    SendMessageW(hRichEdit, WM_COPY, 0, 0);
+    if (!hadSelection) {
+        SendMessageW(hRichEdit, EM_SETSEL, 0, 0);
     }
 }
 
-void ShowListViewContextMenu(HWND hWnd, int x, int y)
-{
-    if (!hListView) return;
-
-    int iItem = ListView_GetNextItem(hListView, -1, LVNI_SELECTED);
-    bool hasSelection = (iItem != -1);
-
-    if (!hasSelection) return;
-
-    HMENU hMenu = CreatePopupMenu();
-    AppendMenuW(hMenu, MF_ENABLED, 2001, L"复制");
-    AppendMenuW(hMenu, MF_ENABLED, 2002, L"搜索");
-
-    POINT pt = { x, y };
-    if (x == -1 && y == -1) {
-        GetCursorPos(&pt);
-    }
-
-    int cmd = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_NONOTIFY, pt.x, pt.y, 0, hWnd, nullptr);
-    DestroyMenu(hMenu);
-
-    if (cmd == 2001 || cmd == 2002) {
-        LVITEM lvi;
-        lvi.iItem = iItem;
-        lvi.iSubItem = g_lastClickedSubItem;
-        lvi.mask = LVIF_TEXT;
-        WCHAR szText[1024];
-        lvi.pszText = szText;
-        lvi.cchTextMax = 1024;
-        ListView_GetItem(hListView, &lvi);
-        std::wstring selectedText = szText;
-
-        if (cmd == 2001) {
-            if (OpenClipboard(NULL)) {
+void CopyFocusedContent() {
+    HWND focus = GetFocus();
+    if (focus == hRichEdit || focus == hEditSearch) {
+        SendMessageW(focus, WM_COPY, 0, 0);
+    } else if (focus == hListView) {
+        CopySelectedListCell();
+    } else if (focus == hTreeView) {
+        HTREEITEM selected = TreeView_GetSelection(hTreeView);
+        if (!selected) return;
+        WCHAR text[4096] = L"";
+        TVITEM item{};
+        item.mask = TVIF_TEXT;
+        item.hItem = selected;
+        item.pszText = text;
+        item.cchTextMax = _countof(text);
+        if (TreeView_GetItem(hTreeView, &item)) {
+            std::wstring value = text;
+            if (OpenClipboard(g_hMainWindow)) {
                 EmptyClipboard();
-                HGLOBAL hGlobal = GlobalAlloc(GMEM_MOVEABLE, (selectedText.length() + 1) * sizeof(WCHAR));
-                if (hGlobal) {
-                    LPWSTR pData = (LPWSTR)GlobalLock(hGlobal);
-                    if (pData) {
-                        wcscpy_s(pData, selectedText.length() + 1, selectedText.c_str());
-                        GlobalUnlock(hGlobal);
-                        SetClipboardData(CF_UNICODETEXT, hGlobal);
+                HGLOBAL memory = GlobalAlloc(GMEM_MOVEABLE, (value.size() + 1) * sizeof(WCHAR));
+                if (memory) {
+                    auto data = static_cast<WCHAR*>(GlobalLock(memory));
+                    if (data) {
+                        wcscpy_s(data, value.size() + 1, value.c_str());
+                        GlobalUnlock(memory);
+                        SetClipboardData(CF_UNICODETEXT, memory);
                     }
                 }
                 CloseClipboard();
             }
-        }
-        else if (cmd == 2002) {
-            SetWindowTextW(hEditSearch, selectedText.c_str());
-            SearchItems(selectedText);
-        }
-    }
-}
-
-void UpdateTabViews()
-{
-    int tabIndex = TabCtrl_GetCurSel(hTabCtrl);
-    
-    if (tabIndex == 0)
-    {
-        ShowWindow(hListView, SW_SHOW);
-        ShowWindow(hRichEdit, SW_HIDE);
-        HTREEITEM hSelected = TreeView_GetSelection(hTreeView);
-        if (hSelected && g_pdbLoaded) {
-            PopulateListView(hSelected);
-        }
-    }
-    else
-    {
-        ShowWindow(hListView, SW_HIDE);
-        ShowWindow(hRichEdit, SW_SHOW);
-        FontManager::ApplyHeaderViewFont(hRichEdit);
-        HTREEITEM hSelected = TreeView_GetSelection(hTreeView);
-        if (hSelected && g_pdbLoaded) {
-            ShowHeaderView(hSelected);
         }
     }
 }

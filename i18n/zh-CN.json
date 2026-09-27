@@ -154,6 +154,7 @@
     
     "group_enhanced_options": "导出增强选项",
     "opt_flatten_namespaces": "扁平化命名空间",
+    "opt_expand_anonymous_aggregates": "展开匿名 struct/union",
     "opt_remove_void_params": "消除void参数",
     "opt_include_enums_in_enumsh": "Enums.h包含枚举",
     "opt_generate_typedefs": "生成类型定义",
@@ -170,5 +171,31 @@
     
     "button_ok": "确定",
     "button_cancel": "取消",
-    "info_export_hint": "如果符号信息查看不全请导出后查看"
+    "info_export_hint": "如果符号信息查看不全请导出后查看",
+
+    "button_cancel_task": "取消任务",
+    "clear_search": "清空搜索",
+    "search_history": "搜索历史",
+    "search_tooltip": "搜索符号，按 Enter 执行",
+    "search_placeholder": "搜索函数、类、结构体或变量...",
+    "menu_copy": "复制",
+    "menu_search": "搜索所选内容",
+    "search_results": "搜索结果",
+    "search_no_results": "没有匹配结果",
+
+    "status_reading_debug_info": "正在读取 DLL/EXE 调试信息...",
+    "status_debug_info_found": "已找到调试信息: ",
+    "status_connecting_symbol_server": "正在连接 Microsoft 符号服务器...",
+    "status_opening_connection": "正在打开连接...",
+    "status_download_complete": "下载完成",
+    "status_parsing_functions": "正在解析函数...",
+    "status_parsing_global_variables": "正在解析全局变量...",
+    "status_parsing_classes": "正在解析类...",
+    "status_parsing_structs_unions": "正在解析结构体和联合体...",
+    "status_complete": "解析完成",
+    "status_downloading_progress": "正在下载: ",
+    "status_canceling": "正在取消任务...",
+    "status_task_cancelled": "任务已取消",
+    "status_task_failed": "任务失败",
+    "msg_invalid_mirror_url": "镜像源地址必须以 http:// 或 https:// 开头"
 }

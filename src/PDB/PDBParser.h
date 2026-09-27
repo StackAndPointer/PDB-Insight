@@ -19,8 +19,14 @@ public:
     std::wstring GetLastError() const { return m_lastError; }
 
     void SetProgressCallback(std::function<void(int, const std::wstring&)> callback) {
-        m_progressCallback = callback;
+        m_progressCallback = std::move(callback);
     }
+
+    void SetCancellationCallback(std::function<bool()> callback) {
+        m_cancellationCallback = std::move(callback);
+    }
+
+    bool WasCancelled() const { return m_cancelled; }
 
     static std::wstring AccessTypeToString(AccessType access);
     static std::wstring CallingConventionToString(CallingConvention cc);
@@ -29,17 +35,19 @@ public:
 private:
     bool Initialize();
     void Cleanup();
+    bool IsCancelled();
+    bool ReportProgress(int percent, const std::wstring& message);
 
     void ParseFunctions(IDiaSymbol* pGlobal, ModuleInfo& moduleInfo);
-    void ParseClasses(IDiaSymbol* pGlobal, ModuleInfo& moduleInfo);
-    void ParseStructs(IDiaSymbol* pGlobal, ModuleInfo& moduleInfo);
-    void ParseUnions(IDiaSymbol* pGlobal, ModuleInfo& moduleInfo);
+    void ParseUdtSymbols(IDiaSymbol* pGlobal, ModuleInfo& moduleInfo);
     void ParseEnums(IDiaSymbol* pGlobal, ModuleInfo& moduleInfo);
     void ParseGlobalVariables(IDiaSymbol* pGlobal, ModuleInfo& moduleInfo);
     void ParseClassDetails(IDiaSymbol* pClass, ClassInfo& classInfo);
-    void ParseVirtualFunctions(IDiaSymbol* pClass, ClassInfo& classInfo);
+    void ParseMemberVariables(IDiaSymbol* owner, std::vector<MemberVariableInfo>& members, int depth = 0);
     void ParseFunctionDetails(IDiaSymbol* pFunction, FunctionInfo& funcInfo);
     void ParseParameters(IDiaSymbol* pFunction, std::vector<ParameterInfo>& params);
+    TypeRef BuildTypeRef(IDiaSymbol* pType, int depth = 0);
+    bool IsAnonymousTypeName(const std::wstring& name) const;
     std::wstring GetSymbolName(IDiaSymbol* pSymbol);
     std::wstring GetUndecoratedName(IDiaSymbol* pSymbol);
     std::wstring GetTypeName(IDiaSymbol* pType);
@@ -51,4 +59,7 @@ private:
     IDiaSymbol* m_pGlobal;
     std::wstring m_lastError;
     std::function<void(int, const std::wstring&)> m_progressCallback;
+    std::function<bool()> m_cancellationCallback;
+    bool m_cancelled = false;
+    bool m_comInitialized = false;
 };

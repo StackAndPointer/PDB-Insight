@@ -26,12 +26,12 @@ public:
     static std::wstring FormatOffset(LONG offset, NumberDisplayMode mode);
     static std::wstring FlattenName(const std::wstring& name);
     static std::wstring ProcessTypeName(const std::wstring& name, const ExportSettings& settings);
+    static std::wstring RenderDeclaration(const TypeRef& type, const std::wstring& name);
     static std::wstring RemoveVoidParams(const std::wstring& signature);
+    static std::wstring AccessTypeToString(AccessType access);
 
 private:
-    static std::wstring AccessTypeToString(AccessType access);
     static std::wstring EscapeForHeader(const std::wstring& str);
     static const ClassInfo* FindClassInfo(const std::wstring& className, const ModuleInfo* moduleInfo);
     static std::wstring GetIndent(const ExportSettings& settings, int level);
-    static std::pair<std::wstring, std::wstring> SplitTypeAndArrayDimensions(const std::wstring& typeName);
 };

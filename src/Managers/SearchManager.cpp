@@ -1,140 +1,141 @@
 #include "SearchManager.h"
+#include "ControlsManager.h"
 #include "TreeViewManager.h"
 #include "LanguageManager.h"
 #include "TreeNodeHelper.h"
 
-void SearchItems(const std::wstring& text, bool addToHistory)
-{
-    if (text.empty())
-    {
+
+void SearchItems(const std::wstring& text, bool addToHistory) {
+    if (text.empty()) {
         PopulateTreeView();
         return;
     }
-
-    if (addToHistory)
-    {
-        ConfigManager::GetInstance().AddSearchHistory(text);
-    }
-
     if (!g_pdbLoaded) return;
+
+    if (addToHistory) ConfigManager::GetInstance().AddSearchHistory(text);
 
     std::wstring lowerText = text;
     for (auto& c : lowerText) c = towlower(c);
 
+    SendMessageW(hTreeView, WM_SETREDRAW, FALSE, 0);
     TreeView_DeleteAllItems(hTreeView);
 
-    HTREEITEM hRoot = AddTreeItem(TVI_ROOT, g_moduleInfo.name.empty() ? LanguageManager::GetInstance().GetString(L"tree_module", L"模块") : g_moduleInfo.name, 0);
+    HTREEITEM root = AddTreeItem(TVI_ROOT,
+        LANG_STR(L"search_results") + L" - " + text, 0);
+    HTREEITEM functions = nullptr;
+    HTREEITEM classes = nullptr;
+    HTREEITEM structs = nullptr;
+    HTREEITEM unions = nullptr;
+    HTREEITEM enums = nullptr;
+    HTREEITEM variables = nullptr;
+    size_t resultCount = 0;
 
-    HTREEITEM hFunctions = nullptr;
-    for (size_t i = 0; i < g_moduleInfo.functions.size(); ++i)
-    {
-        std::wstring funcName = PDBParser::GenerateFunctionSignature(g_moduleInfo.functions[i]);
-        std::wstring lowerFuncName = funcName;
-        for (auto& c : lowerFuncName) c = towlower(c);
-        
-        if (lowerFuncName.find(lowerText) != std::wstring::npos)
-        {
-            if (!hFunctions)
-            {
-                hFunctions = AddTreeItem(hRoot, LanguageManager::GetInstance().GetString(L"tree_functions", L"函数"), 1);
-            }
-            AddTreeItem(hFunctions, funcName, TreeNodeParamHelper::MakeParam(TreeNodeType::FunctionItem, i));
-        }
+    for (size_t i = 0; i < g_moduleInfo.functions.size(); ++i) {
+        std::wstring name = g_moduleInfo.functions[i].displaySignature.empty()
+            ? PDBParser::GenerateFunctionSignature(g_moduleInfo.functions[i])
+            : g_moduleInfo.functions[i].displaySignature;
+        std::wstring lowerName = name;
+        for (auto& c : lowerName) c = towlower(c);
+        if (lowerName.find(lowerText) == std::wstring::npos) continue;
+        if (!functions) functions = AddTreeItem(root, LANG_STR(L"tree_functions"), 1);
+        AddTreeItem(functions, name, TreeNodeParamHelper::MakeParam(TreeNodeType::FunctionItem, i));
+        ++resultCount;
     }
 
-    HTREEITEM hClasses = nullptr;
-    for (size_t i = 0; i < g_moduleInfo.classes.size(); ++i)
-    {
-        std::wstring lowerClassName = g_moduleInfo.classes[i].name;
-        for (auto& c : lowerClassName) c = towlower(c);
-        
-        if (lowerClassName.find(lowerText) != std::wstring::npos)
-        {
-            if (!hClasses)
-            {
-                hClasses = AddTreeItem(hRoot, LanguageManager::GetInstance().GetString(L"tree_classes", L"类"), 2);
-            }
-            AddTreeItem(hClasses, g_moduleInfo.classes[i].name, TreeNodeParamHelper::MakeParam(TreeNodeType::ClassItem, i));
-        }
+    for (size_t i = 0; i < g_moduleInfo.classes.size(); ++i) {
+        std::wstring name = g_moduleInfo.classes[i].name;
+        std::wstring lowerName = name;
+        for (auto& c : lowerName) c = towlower(c);
+        if (lowerName.find(lowerText) == std::wstring::npos) continue;
+        if (!classes) classes = AddTreeItem(root, LANG_STR(L"tree_classes"), 2);
+        AddTreeItem(classes, name, TreeNodeParamHelper::MakeParam(TreeNodeType::ClassItem, i));
+        ++resultCount;
     }
 
-    HTREEITEM hStructs = nullptr;
-    for (size_t i = 0; i < g_moduleInfo.structs.size(); ++i)
-    {
-        std::wstring lowerStructName = g_moduleInfo.structs[i].name;
-        for (auto& c : lowerStructName) c = towlower(c);
-        
-        if (lowerStructName.find(lowerText) != std::wstring::npos)
-        {
-            if (!hStructs)
-            {
-                hStructs = AddTreeItem(hRoot, LanguageManager::GetInstance().GetString(L"tree_structs", L"结构体"), 3);
-            }
-            AddTreeItem(hStructs, g_moduleInfo.structs[i].name, TreeNodeParamHelper::MakeParam(TreeNodeType::StructItem, i));
-        }
+    for (size_t i = 0; i < g_moduleInfo.structs.size(); ++i) {
+        std::wstring name = g_moduleInfo.structs[i].name;
+        std::wstring lowerName = name;
+        for (auto& c : lowerName) c = towlower(c);
+        if (lowerName.find(lowerText) == std::wstring::npos) continue;
+        if (!structs) structs = AddTreeItem(root, LANG_STR(L"tree_structs"), 3);
+        AddTreeItem(structs, name, TreeNodeParamHelper::MakeParam(TreeNodeType::StructItem, i));
+        ++resultCount;
     }
 
-    HTREEITEM hUnions = nullptr;
-    for (size_t i = 0; i < g_moduleInfo.unions.size(); ++i)
-    {
-        std::wstring lowerUnionName = g_moduleInfo.unions[i].name;
-        for (auto& c : lowerUnionName) c = towlower(c);
-        
-        if (lowerUnionName.find(lowerText) != std::wstring::npos)
-        {
-            if (!hUnions)
-            {
-                hUnions = AddTreeItem(hRoot, LanguageManager::GetInstance().GetString(L"tree_unions", L"联合体"), 4);
-            }
-            AddTreeItem(hUnions, g_moduleInfo.unions[i].name, TreeNodeParamHelper::MakeParam(TreeNodeType::UnionItem, i));
-        }
+    for (size_t i = 0; i < g_moduleInfo.unions.size(); ++i) {
+        std::wstring name = g_moduleInfo.unions[i].name;
+        std::wstring lowerName = name;
+        for (auto& c : lowerName) c = towlower(c);
+        if (lowerName.find(lowerText) == std::wstring::npos) continue;
+        if (!unions) unions = AddTreeItem(root, LANG_STR(L"tree_unions"), 4);
+        AddTreeItem(unions, name, TreeNodeParamHelper::MakeParam(TreeNodeType::UnionItem, i));
+        ++resultCount;
     }
 
-    HTREEITEM hEnums = nullptr;
-    for (size_t i = 0; i < g_moduleInfo.enums.size(); ++i)
-    {
-        std::wstring lowerEnumName = g_moduleInfo.enums[i].name;
-        for (auto& c : lowerEnumName) c = towlower(c);
-        
-        if (lowerEnumName.find(lowerText) != std::wstring::npos)
-        {
-            if (!hEnums)
-            {
-                hEnums = AddTreeItem(hRoot, LanguageManager::GetInstance().GetString(L"tree_enums", L"枚举"), 5);
-            }
-            AddTreeItem(hEnums, g_moduleInfo.enums[i].name, 50000 + (DWORD)i);
-        }
+    for (size_t i = 0; i < g_moduleInfo.enums.size(); ++i) {
+        std::wstring name = g_moduleInfo.enums[i].name;
+        std::wstring lowerName = name;
+        for (auto& c : lowerName) c = towlower(c);
+        if (lowerName.find(lowerText) == std::wstring::npos) continue;
+        if (!enums) enums = AddTreeItem(root, LANG_STR(L"tree_enums"), 5);
+        AddTreeItem(enums, name, TreeNodeParamHelper::MakeParam(TreeNodeType::EnumItem, i));
+        ++resultCount;
     }
 
-    HTREEITEM hGlobalVars = nullptr;
-    for (size_t i = 0; i < g_moduleInfo.globalVariables.size(); ++i)
-    {
-        std::wstring lowerVarName = g_moduleInfo.globalVariables[i].name;
-        for (auto& c : lowerVarName) c = towlower(c);
-        
-        if (lowerVarName.find(lowerText) != std::wstring::npos)
-        {
-            if (!hGlobalVars)
-            {
-                hGlobalVars = AddTreeItem(hRoot, LanguageManager::GetInstance().GetString(L"tree_global_variables", L"全局变量"), 6);
-            }
-            AddTreeItem(hGlobalVars, g_moduleInfo.globalVariables[i].name, TreeNodeParamHelper::MakeParam(TreeNodeType::GlobalVarItem, i));
-        }
+    for (size_t i = 0; i < g_moduleInfo.globalVariables.size(); ++i) {
+        std::wstring name = g_moduleInfo.globalVariables[i].name;
+        std::wstring lowerName = name;
+        for (auto& c : lowerName) c = towlower(c);
+        if (lowerName.find(lowerText) == std::wstring::npos) continue;
+        if (!variables) variables = AddTreeItem(root, LANG_STR(L"tree_global_variables"), 6);
+        AddTreeItem(variables, name, TreeNodeParamHelper::MakeParam(TreeNodeType::GlobalVarItem, i));
+        ++resultCount;
     }
 
-    TreeView_Expand(hTreeView, hRoot, TVE_EXPAND);
+    if (resultCount == 0) {
+        AddTreeItem(root, LANG_STR(L"search_no_results"), static_cast<LPARAM>(-1));
+    }
+
+    TreeView_Expand(hTreeView, root, TVE_EXPAND);
+    for (HTREEITEM category : { functions, classes, structs, unions, enums, variables }) {
+        if (category) TreeView_Expand(hTreeView, category, TVE_EXPAND);
+    }
+    SendMessageW(hTreeView, WM_SETREDRAW, TRUE, 0);
+    InvalidateRect(hTreeView, nullptr, TRUE);
+    UpdateStatusBar(LANG_STR(L"search_results") + L": " + std::to_wstring(resultCount));
 }
 
-LRESULT CALLBACK SearchEditProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
-{
-    if ((message == WM_CHAR && wParam == VK_RETURN) || 
-        (message == WM_KEYDOWN && wParam == VK_RETURN)) {
-        int len = GetWindowTextLengthW(hEditSearch) + 1;
-        std::wstring searchText(len, L'\0');
-        GetWindowTextW(hEditSearch, &searchText[0], len);
-        searchText.resize(len - 1);
+LRESULT CALLBACK SearchEditProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
+    const bool trackedMessage = message == WM_KEYDOWN || message == WM_APP_UPDATE_SEARCH_UI ||
+        message == WM_CHAR || message == WM_PASTE || message == WM_CUT ||
+        message == WM_CLEAR || message == WM_SETTEXT || message == WM_UNDO;
+    if (!trackedMessage) {
+        return CallWindowProcW(g_pOldEditProc, hWnd, message, wParam, lParam);
+    }
+    if (message == WM_KEYDOWN && wParam == VK_RETURN) {
+        int length = GetWindowTextLengthW(hWnd) + 1;
+        std::wstring searchText(static_cast<size_t>(length), L'\0');
+        GetWindowTextW(hWnd, &searchText[0], length);
+        searchText.resize(length - 1);
         SearchItems(searchText);
         return 0;
     }
-    return CallWindowProcW(g_pOldEditProc, hWnd, message, wParam, lParam);
+    if (message == WM_KEYDOWN && wParam == VK_ESCAPE) {
+        ClearSearchBox();
+        return 0;
+    }
+    if (message == WM_APP_UPDATE_SEARCH_UI) {
+        UpdateSearchClearButton();
+        return 0;
+    }
+    LRESULT result = CallWindowProcW(g_pOldEditProc, hWnd, message, wParam, lParam);
+    if (message == WM_CHAR || message == WM_PASTE || message == WM_CUT || message == WM_CLEAR ||
+        message == WM_SETTEXT || message == WM_UNDO) {
+        if (message == WM_SETTEXT) {
+            PostMessageW(hWnd, WM_APP_UPDATE_SEARCH_UI, 0, 0);
+        } else {
+            UpdateSearchClearButton();
+        }
+    }
+    return result;
 }

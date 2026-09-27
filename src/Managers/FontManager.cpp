@@ -1,8 +1,41 @@
 #include "FontManager.h"
 
-HFONT FontManager::s_headerViewFont = nullptr;
+HFONT FontManager::s_codeFont = nullptr;
 HFONT FontManager::s_defaultFont = nullptr;
 int FontManager::s_dpi = 96;
+
+HFONT FontManager::CreateUiFont() {
+    NONCLIENTMETRICSW ncm = {};
+    ncm.cbSize = sizeof(ncm);
+    if (SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof(ncm), &ncm, 0)) {
+        ncm.lfMessageFont.lfHeight = -MulDiv(10, s_dpi, 72);
+        return CreateFontIndirectW(&ncm.lfMessageFont);
+    }
+
+    LOGFONTW lf = {};
+    lf.lfHeight = -MulDiv(10, s_dpi, 72);
+    lf.lfWeight = FW_NORMAL;
+    lf.lfCharSet = DEFAULT_CHARSET;
+    lf.lfQuality = CLEARTYPE_QUALITY;
+    wcscpy_s(lf.lfFaceName, L"Segoe UI");
+    return CreateFontIndirectW(&lf);
+}
+
+HFONT FontManager::CreateCodeFont() {
+    const wchar_t* faces[] = { L"Cascadia Mono", L"Consolas", L"Courier New" };
+    for (const wchar_t* face : faces) {
+        LOGFONTW lf = {};
+        lf.lfHeight = -MulDiv(10, s_dpi, 72);
+        lf.lfWeight = FW_NORMAL;
+        lf.lfCharSet = DEFAULT_CHARSET;
+        lf.lfQuality = CLEARTYPE_QUALITY;
+        lf.lfPitchAndFamily = FIXED_PITCH | FF_MODERN;
+        wcscpy_s(lf.lfFaceName, face);
+        HFONT font = CreateFontIndirectW(&lf);
+        if (font) return font;
+    }
+    return CreateUiFont();
+}
 
 void FontManager::Initialize() {
     HDC hDC = GetDC(nullptr);
@@ -10,68 +43,14 @@ void FontManager::Initialize() {
         s_dpi = GetDeviceCaps(hDC, LOGPIXELSY);
         ReleaseDC(nullptr, hDC);
     }
-    
-    int fontSize = 10;
-    if (s_dpi >= 144) {
-        fontSize = 12;
-    } else if (s_dpi >= 120) {
-        fontSize = 11;
-    }
-    
-    LOGFONTW lf = {};
-    lf.lfHeight = -MulDiv(fontSize, s_dpi, 72);
-    lf.lfWidth = 0;
-    lf.lfEscapement = 0;
-    lf.lfOrientation = 0;
-    lf.lfWeight = FW_NORMAL;
-    lf.lfItalic = FALSE;
-    lf.lfUnderline = FALSE;
-    lf.lfStrikeOut = FALSE;
-    lf.lfCharSet = DEFAULT_CHARSET;
-    lf.lfOutPrecision = OUT_DEFAULT_PRECIS;
-    lf.lfClipPrecision = CLIP_DEFAULT_PRECIS;
-    lf.lfQuality = DEFAULT_QUALITY;
-    lf.lfPitchAndFamily = DEFAULT_PITCH | FF_DONTCARE;
-    
-    wcscpy_s(lf.lfFaceName, L"SimSun");
-    lf.lfCharSet = GB2312_CHARSET;
-    s_headerViewFont = CreateFontIndirectW(&lf);
-    
-    if (!s_headerViewFont) {
-        wcscpy_s(lf.lfFaceName, L"宋体");
-        lf.lfCharSet = GB2312_CHARSET;
-        s_headerViewFont = CreateFontIndirectW(&lf);
-        
-        if (!s_headerViewFont) {
-            wcscpy_s(lf.lfFaceName, L"Consolas");
-            lf.lfCharSet = DEFAULT_CHARSET;
-            s_headerViewFont = CreateFontIndirectW(&lf);
-            
-            if (!s_headerViewFont) {
-                wcscpy_s(lf.lfFaceName, L"Courier New");
-                lf.lfCharSet = DEFAULT_CHARSET;
-                s_headerViewFont = CreateFontIndirectW(&lf);
-                
-                if (!s_headerViewFont) {
-                    NONCLIENTMETRICSW ncm = {};
-                    ncm.cbSize = sizeof(ncm);
-                    SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof(ncm), &ncm, 0);
-                    s_headerViewFont = CreateFontIndirectW(&ncm.lfMessageFont);
-                }
-            }
-        }
-    }
-    
-    NONCLIENTMETRICSW ncm = {};
-    ncm.cbSize = sizeof(ncm);
-    SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof(ncm), &ncm, 0);
-    s_defaultFont = CreateFontIndirectW(&ncm.lfMessageFont);
+    s_defaultFont = CreateUiFont();
+    s_codeFont = CreateCodeFont();
 }
 
 void FontManager::Cleanup() {
-    if (s_headerViewFont) {
-        DeleteObject(s_headerViewFont);
-        s_headerViewFont = nullptr;
+    if (s_codeFont) {
+        DeleteObject(s_codeFont);
+        s_codeFont = nullptr;
     }
     if (s_defaultFont) {
         DeleteObject(s_defaultFont);
@@ -79,8 +58,20 @@ void FontManager::Cleanup() {
     }
 }
 
+void FontManager::UpdateDPI(int dpi) {
+    if (dpi <= 0 || dpi == s_dpi) return;
+    s_dpi = dpi;
+    Cleanup();
+    s_defaultFont = CreateUiFont();
+    s_codeFont = CreateCodeFont();
+}
+
 HFONT FontManager::GetHeaderViewFont() {
-    return s_headerViewFont;
+    return s_codeFont;
+}
+
+HFONT FontManager::GetCodeFont() {
+    return s_codeFont;
 }
 
 HFONT FontManager::GetDefaultFont() {
@@ -96,8 +87,8 @@ int FontManager::ScaleForDPI(int value) {
 }
 
 void FontManager::ApplyHeaderViewFont(HWND hRichEdit) {
-    if (hRichEdit && s_headerViewFont) {
-        SendMessageW(hRichEdit, WM_SETFONT, (WPARAM)s_headerViewFont, TRUE);
+    if (hRichEdit && s_codeFont) {
+        SendMessageW(hRichEdit, WM_SETFONT, reinterpret_cast<WPARAM>(s_codeFont), TRUE);
         InvalidateRect(hRichEdit, nullptr, TRUE);
     }
 }

@@ -4,3 +4,4 @@
 
 void PopulateListView(HTREEITEM hItem);
 void AddListViewColumn(int index, const std::wstring& text, int width);
+void ResizeListViewColumns();

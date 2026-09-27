@@ -11,88 +11,40 @@
 #include "DPIManager.h"
 #include "SettingsManager.h"
 #include "CommandLineManager.h"
-#include "PDBDownloader.h"
+#include "LoadingManager.h"
 
 #pragma comment(lib, "comctl32.lib")
 #pragma comment(lib, "shell32.lib")
 #pragma comment(lib, "wininet.lib")
 
-ATOM MyRegisterClass(HINSTANCE hInstance)
-{
-    WNDCLASSEXW wcex;
-
-    wcex.cbSize = sizeof(WNDCLASSEX);
-
-    wcex.style = CS_HREDRAW | CS_VREDRAW;
-    wcex.lpfnWndProc = WndProc;
-    wcex.cbClsExtra = 0;
-    wcex.cbWndExtra = 0;
-    wcex.hInstance = hInstance;
-
-    HICON hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_PDBVIEWER));
-    if (!hIcon) {
-        hIcon = LoadIcon(NULL, IDI_APPLICATION);
-    }
-    wcex.hIcon = hIcon;
-
-    wcex.hCursor = LoadCursor(nullptr, IDC_ARROW);
-    wcex.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
-
-    if (!LoadStringW(hInstance, IDC_PDBVIEWER, szWindowClass, MAX_LOADSTRING)) {
-        wcscpy_s(szWindowClass, L"PDBINSIGHT");
-    }
-
-    HMENU hMenu = LoadMenu(hInstance, MAKEINTRESOURCEW(IDC_PDBVIEWER));
-    if (hMenu) {
-        wcex.lpszMenuName = MAKEINTRESOURCEW(IDC_PDBVIEWER);
-    }
-    else {
-        wcex.lpszMenuName = NULL;
-    }
-
-    wcex.lpszClassName = szWindowClass;
-
-    HICON hIconSm = LoadIcon(wcex.hInstance, MAKEINTRESOURCE(IDI_SMALL));
-    if (!hIconSm) {
-        hIconSm = LoadIcon(NULL, IDI_APPLICATION);
-    }
-    wcex.hIconSm = hIconSm;
-
-    ATOM atom = RegisterClassExW(&wcex);
-    if (!atom) {
-        DWORD dwError = GetLastError();
-        std::wstringstream ss;
-        ss << L"RegisterClassEx failed! Error code: " << dwError;
-        ss << L", ClassName: " << szWindowClass;
-        MessageBoxW(NULL, ss.str().c_str(), L"Error", MB_OK | MB_ICONERROR);
-
-        wcscpy_s(szWindowClass, L"PDBINSIGHT");
-        wcex.lpszClassName = szWindowClass;
-        atom = RegisterClassExW(&wcex);
-        if (!atom) {
-            dwError = GetLastError();
-            std::wstringstream ss2;
-            ss2 << L"RegisterClassEx failed again! Error code: " << dwError;
-            MessageBoxW(NULL, ss2.str().c_str(), L"Error", MB_OK | MB_ICONERROR);
-        }
-    }
-    return atom;
+ATOM MyRegisterClass(HINSTANCE hInstance) {
+    WNDCLASSEXW windowClass{};
+    windowClass.cbSize = sizeof(windowClass);
+    windowClass.style = CS_HREDRAW | CS_VREDRAW;
+    windowClass.lpfnWndProc = WndProc;
+    windowClass.hInstance = hInstance;
+    windowClass.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_PDBVIEWER));
+    if (!windowClass.hIcon) windowClass.hIcon = LoadIcon(nullptr, IDI_APPLICATION);
+    windowClass.hCursor = LoadCursor(nullptr, IDC_ARROW);
+    windowClass.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_WINDOW + 1);
+    windowClass.lpszMenuName = MAKEINTRESOURCEW(IDC_PDBVIEWER);
+    windowClass.lpszClassName = szWindowClass;
+    windowClass.hIconSm = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_SMALL));
+    if (!windowClass.hIconSm) windowClass.hIconSm = windowClass.hIcon;
+    return RegisterClassExW(&windowClass);
 }
 
-BOOL InitInstance(HINSTANCE hInstance, int nCmdShow, LPWSTR lpCmdLine)
-{
+BOOL InitInstance(HINSTANCE hInstance, int nCmdShow, LPWSTR lpCmdLine) {
     hInst = hInstance;
-
     CommandLineManager::GetInstance().ParseCommandLine(lpCmdLine);
-    const CommandLineOptions& cmdOptions = CommandLineManager::GetInstance().GetOptions();
-
-    if (cmdOptions.showHelp) {
+    const CommandLineOptions& options = CommandLineManager::GetInstance().GetOptions();
+    if (options.showHelp) {
         CommandLineManager::GetInstance().ShowHelp();
         return FALSE;
     }
 
     if (!LoadLibraryW(L"riched20.dll")) {
-        MessageBoxW(NULL, L"Failed to load riched20.dll!", L"Error", MB_OK | MB_ICONERROR);
+        MessageBoxW(nullptr, L"Failed to load riched20.dll!", L"Error", MB_OK | MB_ICONERROR);
         return FALSE;
     }
 
@@ -100,384 +52,231 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow, LPWSTR lpCmdLine)
     g_numberMode = ConfigManager::GetInstance().GetNumberMode();
     g_expandBaseClasses = ConfigManager::GetInstance().GetExpandBaseClasses();
     g_currentLanguage = ConfigManager::GetInstance().GetLanguage();
-    
     DPIManager::Initialize();
     FontManager::Initialize();
-
     if (!LanguageManager::GetInstance().LoadLanguageByCode(g_currentLanguage)) {
         LanguageManager::GetInstance().DetectAndLoadSystemLanguage();
     }
 
-    if (!LoadStringW(hInstance, IDS_APP_TITLE, szTitle, MAX_LOADSTRING)) {
-        wcscpy_s(szTitle, L"PDB Insight");
-    }
+    LoadStringW(hInstance, IDS_APP_TITLE, szTitle, _countof(szTitle));
+    LoadStringW(hInstance, IDC_PDBVIEWER, szWindowClass, _countof(szWindowClass));
 
-    if (!LoadStringW(hInstance, IDC_PDBVIEWER, szWindowClass, MAX_LOADSTRING)) {
-        wcscpy_s(szWindowClass, L"PDBINSIGHT");
-    }
-
-    int windowWidth = DPIManager::ScaleX(1200);
-    int windowHeight = DPIManager::ScaleY(800);
+    RECT windowRect{0, 0, DPIManager::ScaleX(1200), DPIManager::ScaleY(800)};
+    DPIManager::AdjustWindowRectForDPI(&windowRect, WS_OVERLAPPEDWINDOW, TRUE, 0);
     HWND hWnd = CreateWindowW(szWindowClass, szTitle, WS_OVERLAPPEDWINDOW,
-        CW_USEDEFAULT, 0, windowWidth, windowHeight, nullptr, nullptr, hInstance, nullptr);
-
-    if (!hWnd)
-    {
-        DWORD dwError = GetLastError();
-        std::wstringstream ss;
-        ss << L"CreateWindow failed! Error code: " << dwError;
-        MessageBoxW(NULL, ss.str().c_str(), L"Error", MB_OK | MB_ICONERROR);
-        return FALSE;
-    }
+        CW_USEDEFAULT, CW_USEDEFAULT,
+        windowRect.right - windowRect.left, windowRect.bottom - windowRect.top,
+        nullptr, nullptr, hInstance, nullptr);
+    if (!hWnd) return FALSE;
 
     CreateControls(hWnd);
-
     RebuildMenu(hWnd);
-
     ShowWindow(hWnd, nCmdShow);
     UpdateWindow(hWnd);
-
+    SetFocus(hEditSearch);
     DragDropManager::Initialize(hWnd);
 
-    std::wstring pdbToLoad;
-
     if (CommandLineManager::GetInstance().ShouldAutoDownloadPdb()) {
-        UpdateStatusBar(LANG_STR(L"status_downloading_pdb"));
-        
-        PDBDownloadResult result = PDBDownloader::GetInstance().DownloadPDBForDll(cmdOptions.dllPath, L"", [](int progress, const std::wstring& text) {
-            UpdateStatusBar(text);
-        });
-        
-        if (result.success) {
-            pdbToLoad = result.pdbPath;
-            std::wstringstream ss;
-            ss << LANG_STR(L"status_pdb_downloaded") << L": " << result.pdbPath;
-            UpdateStatusBar(ss.str());
-        }
-        else {
-            std::wstringstream ss;
-            ss << LANG_STR(L"msg_pdb_download_fail") << L": " << result.errorMessage;
-            MessageBoxW(hWnd, ss.str().c_str(), LANG_STR(L"msg_error").c_str(), MB_OK | MB_ICONERROR);
-            UpdateStatusBar(result.errorMessage);
-        }
+        LoadingManager::StartDllFile(hWnd, options.dllPath);
+    } else if (CommandLineManager::GetInstance().HasValidPdbPath()) {
+        LoadingManager::StartPdbFile(hWnd, options.pdbPath);
     }
-    else if (CommandLineManager::GetInstance().HasValidPdbPath()) {
-        pdbToLoad = cmdOptions.pdbPath;
-    }
-
-    if (!pdbToLoad.empty()) {
-        if (g_parser.LoadPDB(pdbToLoad)) {
-            g_parser.SetProgressCallback([](int progress, const std::wstring& text) {
-                std::wstring status = LANG_STR(L"status_parsing") + L": " + text + L" (" + std::to_wstring(progress) + L"%)";
-                UpdateStatusBar(status);
-            });
-            g_moduleInfo = g_parser.ParseModule();
-            g_moduleInfo.pdbFileName = pdbToLoad;
-            g_pdbLoaded = true;
-
-            PopulateTreeView();
-
-            std::wstringstream ss;
-            ss << LANG_STR(L"status_loaded") << L": " << pdbToLoad
-                << L" | " << LANG_STR(L"tree_functions") << L": " << g_moduleInfo.functions.size()
-                << L" | " << LANG_STR(L"tree_classes") << L": " << g_moduleInfo.classes.size()
-                << L" | " << LANG_STR(L"tree_structs") << L": " << g_moduleInfo.structs.size()
-                << L" | " << LANG_STR(L"tree_unions") << L": " << g_moduleInfo.unions.size();
-            UpdateStatusBar(ss.str());
-        }
-        else {
-            std::wstringstream ss;
-            ss << LANG_STR(L"msg_pdb_load_fail") << L": " << pdbToLoad;
-            MessageBoxW(hWnd, ss.str().c_str(), LANG_STR(L"msg_error").c_str(), MB_OK | MB_ICONERROR);
-        }
-    }
-
     return TRUE;
 }
 
-LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
-{
-    switch (message)
-    {
+LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
+    switch (message) {
     case WM_DROPFILES:
         DragDropManager::HandleDropFiles(wParam, hWnd);
+        return 0;
+
+    case WM_PARENTNOTIFY:
+        if (LOWORD(wParam) == WM_LBUTTONDOWN && HIWORD(wParam) == ID_BUTTON_CLEAR_SEARCH) {
+            ClearSearchBox();
+            return 0;
+        }
         break;
-    case WM_COMMAND:
-    {
-        int wmId = LOWORD(wParam);
-        switch (wmId)
-        {
+
+    case WM_COMMAND: {
+        const int command = LOWORD(wParam);
+        switch (command) {
         case ID_MENU_EXIT:
             DestroyWindow(hWnd);
-            break;
+            return 0;
         case ID_MENU_OPEN:
             OpenPDBFile(hWnd);
-            break;
+            return 0;
         case ID_MENU_OPEN_DLL:
             OpenDllFile(hWnd);
-            break;
-
-        case ID_MENU_EXPORT_CSV:
-            ExportToCSV(hWnd);
-            break;
-        case ID_MENU_EXPORT_XML:
-            ExportToXML(hWnd);
-            break;
-        case ID_MENU_EXPORT_FUNCTIONS_CSV:
-            ExportFunctionsToCSV(hWnd);
-            break;
-        case ID_MENU_EXPORT_CLASSES_CSV:
-            ExportClassesToCSV(hWnd);
-            break;
-        case ID_MENU_EXPORT_HEADER:
-            ExportHeader(hWnd);
-            break;
-        case ID_MENU_EXPORT_ALL_HEADERS:
-            ExportAllHeaders(hWnd);
-            break;
-        case ID_MENU_EXPORT_ENUMS_H:
-            ExportEnumsHeader(hWnd);
-            break;
+            return 0;
         case ID_MENU_CLOSE:
             ClosePDBFile(hWnd);
-            break;
-        case ID_BUTTON_SEARCH:
-        {
-            int len = GetWindowTextLengthW(hEditSearch) + 1;
-            std::wstring searchText(len, L'\0');
-            GetWindowTextW(hEditSearch, &searchText[0], len);
-            searchText.resize(len - 1);
-            SearchItems(searchText);
+            return 0;
+        case ID_MENU_EXPORT_CSV: ExportToCSV(hWnd); return 0;
+        case ID_MENU_EXPORT_XML: ExportToXML(hWnd); return 0;
+        case ID_MENU_EXPORT_FUNCTIONS_CSV: ExportFunctionsToCSV(hWnd); return 0;
+        case ID_MENU_EXPORT_CLASSES_CSV: ExportClassesToCSV(hWnd); return 0;
+        case ID_MENU_EXPORT_HEADER: ExportHeader(hWnd); return 0;
+        case ID_MENU_EXPORT_ALL_HEADERS: ExportAllHeaders(hWnd); return 0;
+        case ID_MENU_EXPORT_ENUMS_H: ExportEnumsHeader(hWnd); return 0;
+        case ID_EDIT_SEARCH:
+            // EN_UPDATE/EN_CHANGE are notifications from the edit control.
+            // Only the accelerator command (HIWORD == 0) should move focus
+            // and select the query; doing this for EN_UPDATE makes each
+            // keystroke replace the entire text.
+            if (HIWORD(wParam) == EN_UPDATE || HIWORD(wParam) == EN_CHANGE) {
+                UpdateSearchClearButton();
+                return 0;
+            }
+            if (HIWORD(wParam) == 0) {
+                SetFocus(hEditSearch);
+                SendMessageW(hEditSearch, EM_SETSEL, 0, -1);
+            }
+            return 0;
+        case ID_EDIT_COPY:
+            CopyFocusedContent();
+            return 0;
+        case ID_BUTTON_COPY_HEADER:
+            CopyHeaderText();
+            return 0;
+        case ID_BUTTON_CLEAR_SEARCH:
+            ClearSearchBox();
+            return 0;
+        case ID_BUTTON_CANCEL_TASK:
+            LoadingManager::CancelCurrentTask();
+            return 0;
+        case ID_BUTTON_SEARCH: {
+            int length = GetWindowTextLengthW(hEditSearch) + 1;
+            std::wstring text(static_cast<size_t>(length), L'\0');
+            GetWindowTextW(hEditSearch, &text[0], length);
+            text.resize(length - 1);
+            SearchItems(text);
+            return 0;
         }
-        break;
-        case ID_BUTTON_SEARCH_HISTORY:
-        {
-            RECT rect;
+        case ID_BUTTON_SEARCH_HISTORY: {
+            RECT rect{};
             GetWindowRect(hButtonSearchHistory, &rect);
             ShowSearchHistoryMenu(hWnd, rect.left, rect.bottom);
+            return 0;
         }
-        break;
         case ID_CLEAR_SEARCH_HISTORY:
             ConfigManager::GetInstance().ClearSearchHistory();
-            break;
+            return 0;
         case ID_NUMBER_HEX:
-            g_numberMode = NUMBER_HEX;
-            ConfigManager::GetInstance().SetNumberMode(NUMBER_HEX);
-            ConfigManager::GetInstance().Save();
-            {
-                HMENU hMenuBar = GetMenu(hWnd);
-                HMENU hViewMenu = GetSubMenu(hMenuBar, 1);
-                CheckMenuRadioItem(hViewMenu, ID_NUMBER_HEX, ID_NUMBER_BOTH, ID_NUMBER_HEX, MF_BYCOMMAND);
-
-                RefreshCurrentSelection();
-            }
-            break;
         case ID_NUMBER_DEC:
-            g_numberMode = NUMBER_DEC;
-            ConfigManager::GetInstance().SetNumberMode(NUMBER_DEC);
-            ConfigManager::GetInstance().Save();
-            {
-                HMENU hMenuBar = GetMenu(hWnd);
-                HMENU hViewMenu = GetSubMenu(hMenuBar, 1);
-                CheckMenuRadioItem(hViewMenu, ID_NUMBER_HEX, ID_NUMBER_BOTH, ID_NUMBER_DEC, MF_BYCOMMAND);
-
-                RefreshCurrentSelection();
-            }
-            break;
         case ID_NUMBER_BOTH:
-            g_numberMode = NUMBER_BOTH;
-            ConfigManager::GetInstance().SetNumberMode(NUMBER_BOTH);
+            g_numberMode = command == ID_NUMBER_HEX ? NUMBER_HEX : command == ID_NUMBER_DEC ? NUMBER_DEC : NUMBER_BOTH;
+            ConfigManager::GetInstance().SetNumberMode(g_numberMode);
             ConfigManager::GetInstance().Save();
-            {
-                HMENU hMenuBar = GetMenu(hWnd);
-                HMENU hViewMenu = GetSubMenu(hMenuBar, 1);
-                CheckMenuRadioItem(hViewMenu, ID_NUMBER_HEX, ID_NUMBER_BOTH, ID_NUMBER_BOTH, MF_BYCOMMAND);
-
-                RefreshCurrentSelection();
-            }
-            break;
+            CheckMenuRadioItem(GetSubMenu(GetMenu(hWnd), 1), ID_NUMBER_HEX, ID_NUMBER_BOTH, command, MF_BYCOMMAND);
+            RefreshCurrentSelection();
+            return 0;
         case ID_EXPAND_BASE_CLASSES:
             g_expandBaseClasses = !g_expandBaseClasses;
             ConfigManager::GetInstance().SetExpandBaseClasses(g_expandBaseClasses);
             ConfigManager::GetInstance().Save();
-            {
-                HMENU hMenuBar = GetMenu(hWnd);
-                HMENU hViewMenu = GetSubMenu(hMenuBar, 1);
-                CheckMenuItem(hViewMenu, ID_EXPAND_BASE_CLASSES, MF_BYCOMMAND | (g_expandBaseClasses ? MF_CHECKED : MF_UNCHECKED));
-
-                RefreshCurrentSelection();
-            }
-            break;
+            CheckMenuItem(GetSubMenu(GetMenu(hWnd), 1), ID_EXPAND_BASE_CLASSES,
+                MF_BYCOMMAND | (g_expandBaseClasses ? MF_CHECKED : MF_UNCHECKED));
+            RefreshCurrentSelection();
+            return 0;
         case ID_LANGUAGE_ZH_CN:
-            g_currentLanguage = L"zh-CN";
-            ConfigManager::GetInstance().SetLanguage(L"zh-CN");
-            ConfigManager::GetInstance().Save();
-            if (LanguageManager::GetInstance().LoadLanguageByCode(L"zh-CN")) {
-                RefreshLanguage(hWnd);
-            }
-            break;
         case ID_LANGUAGE_EN_US:
-            g_currentLanguage = L"en-US";
-            ConfigManager::GetInstance().SetLanguage(L"en-US");
+            g_currentLanguage = command == ID_LANGUAGE_ZH_CN ? L"zh-CN" : L"en-US";
+            ConfigManager::GetInstance().SetLanguage(g_currentLanguage);
             ConfigManager::GetInstance().Save();
-            if (LanguageManager::GetInstance().LoadLanguageByCode(L"en-US")) {
-                RefreshLanguage(hWnd);
-            }
-            break;
-        case ID_ASSOCIATE_PDB:
-            AssociatePDBFiles(hWnd);
-            break;
-        case ID_UNASSOCIATE_PDB:
-            UnassociatePDBFiles(hWnd);
-            break;
-        case ID_MENU_SETTINGS:
-            SettingsManager::GetInstance().ShowSettingsWindow(hWnd);
-            break;
+            if (LanguageManager::GetInstance().LoadLanguageByCode(g_currentLanguage)) RefreshLanguage(hWnd);
+            return 0;
+        case ID_ASSOCIATE_PDB: AssociatePDBFiles(hWnd); return 0;
+        case ID_UNASSOCIATE_PDB: UnassociatePDBFiles(hWnd); return 0;
+        case ID_MENU_SETTINGS: SettingsManager::GetInstance().ShowSettingsWindow(hWnd); return 0;
         default:
-            if (wmId >= ID_SEARCH_HISTORY_FIRST && wmId <= ID_SEARCH_HISTORY_LAST) {
+            if (command >= ID_SEARCH_HISTORY_FIRST && command <= ID_SEARCH_HISTORY_LAST) {
                 const auto& history = ConfigManager::GetInstance().GetSearchHistory();
-                int index = wmId - ID_SEARCH_HISTORY_FIRST;
-                if (index >= 0 && index < (int)history.size()) {
+                int index = command - ID_SEARCH_HISTORY_FIRST;
+                if (index >= 0 && index < static_cast<int>(history.size())) {
                     SetWindowTextW(hEditSearch, history[index].c_str());
                     SearchItems(history[index], false);
                 }
+                return 0;
             }
-            else {
-                return DefWindowProc(hWnd, message, wParam, lParam);
-            }
+            break;
         }
+        break;
     }
-    break;
-    case WM_NOTIFY:
-    {
-        LPNMHDR pnmh = (LPNMHDR)lParam;
-        if (pnmh->idFrom == ID_TREEVIEW && pnmh->code == TVN_SELCHANGED)
-        {
-            LPNMTREEVIEW pnmtv = (LPNMTREEVIEW)lParam;
-            int tabIndex = TabCtrl_GetCurSel(hTabCtrl);
-            if (tabIndex == 0) {
-                PopulateListView(pnmtv->itemNew.hItem);
-            }
-            else {
-                ShowHeaderView(pnmtv->itemNew.hItem);
-            }
+
+    case WM_NOTIFY: {
+        const NMHDR* header = reinterpret_cast<const NMHDR*>(lParam);
+        if (header->idFrom == ID_TREEVIEW && header->code == TVN_SELCHANGED) {
+            const NMTREEVIEW* treeView = reinterpret_cast<const NMTREEVIEW*>(lParam);
+            if (TabCtrl_GetCurSel(hTabCtrl) == 0) PopulateListView(treeView->itemNew.hItem);
+            else ShowHeaderView(treeView->itemNew.hItem);
+            return 0;
         }
-        else if (pnmh->idFrom == ID_TABCTRL && pnmh->code == TCN_SELCHANGE)
-        {
+        if (header->idFrom == ID_TABCTRL && header->code == TCN_SELCHANGE) {
             g_currentTabIndex = TabCtrl_GetCurSel(hTabCtrl);
             UpdateTabViews();
+            return 0;
         }
-        else if (pnmh->idFrom == ID_TREEVIEW && pnmh->code == NM_RCLICK)
-        {
-            LPNMMOUSE pnmouse = (LPNMMOUSE)lParam;
-            POINT pt = pnmouse->pt;
-            ClientToScreen(hTreeView, &pt);
-            ShowOffsetModeMenu(hWnd, pt.x, pt.y);
-        }
-        else if (pnmh->idFrom == ID_RICHEDIT && pnmh->code == NM_RCLICK)
-        {
-            LPNMMOUSE pnmouse = (LPNMMOUSE)lParam;
-            POINT pt = pnmouse->pt;
-            ClientToScreen(hRichEdit, &pt);
-            ShowRichEditContextMenu(hWnd, pt.x, pt.y);
-        }
-        else if (pnmh->idFrom == ID_LISTVIEW && pnmh->code == NM_RCLICK)
-        {
-            LPNMMOUSE pnmouse = (LPNMMOUSE)lParam;
-            
-            LVHITTESTINFO hti;
-            ZeroMemory(&hti, sizeof(hti));
-            hti.pt = pnmouse->pt;
-            ListView_SubItemHitTest(hListView, &hti);
-            g_lastClickedSubItem = (hti.iSubItem >= 0) ? hti.iSubItem : 0;
-            
-            POINT pt = pnmouse->pt;
-            ClientToScreen(hListView, &pt);
-            ShowListViewContextMenu(hWnd, pt.x, pt.y);
-        }
+        break;
     }
-    break;
-    case WM_CONTEXTMENU:
-    {
-        HWND hCtrl = (HWND)wParam;
-        if (hCtrl == hTreeView)
-        {
-            POINT pt;
-            pt.x = LOWORD(lParam);
-            pt.y = HIWORD(lParam);
-            ShowOffsetModeMenu(hWnd, pt.x, pt.y);
-        }
-        else if (hCtrl == hRichEdit)
-        {
-            POINT pt;
-            pt.x = LOWORD(lParam);
-            pt.y = HIWORD(lParam);
-            ShowRichEditContextMenu(hWnd, pt.x, pt.y);
-        }
+
+    case WM_CONTEXTMENU: {
+        HWND control = reinterpret_cast<HWND>(wParam);
+        int x = GET_X_LPARAM(lParam);
+        int y = GET_Y_LPARAM(lParam);
+        if (control == hRichEdit) ShowRichEditContextMenu(hWnd, x, y);
+        else if (control == hTreeView) ShowOffsetModeMenu(hWnd, x, y);
+        return 0;
     }
-    break;
+
+    case WM_APP_LOADING_PROGRESS:
+    case WM_APP_LOADING_COMPLETE:
+        LoadingManager::HandleMessage(hWnd, message, wParam, lParam);
+        return 0;
+
     case WM_SIZE:
-    {
-        if (hTreeView && hTabCtrl && hStatusBar)
-        {
-            RECT rect;
-            GetClientRect(hWnd, &rect);
+        LayoutMainWindow(hWnd);
+        return 0;
 
-            int statusBarHeight = DPIManager::ScaleY(24);
-            int searchBarHeight = DPIManager::ScaleY(30);
-
-            SetWindowPos(hEditSearch, nullptr, DPIManager::ScaleX(10), DPIManager::ScaleY(5), DPIManager::ScaleX(300), DPIManager::ScaleY(24), SWP_NOZORDER);
-            SetWindowPos(hButtonSearch, nullptr, DPIManager::ScaleX(320), DPIManager::ScaleY(5), DPIManager::ScaleX(80), DPIManager::ScaleY(24), SWP_NOZORDER);
-            SetWindowPos(hButtonSearchHistory, nullptr, DPIManager::ScaleX(410), DPIManager::ScaleY(5), DPIManager::ScaleX(30), DPIManager::ScaleY(24), SWP_NOZORDER);
-
-            SetWindowPos(hStatusBar, nullptr, 0, rect.bottom - statusBarHeight, rect.right, statusBarHeight, SWP_NOZORDER);
-
-            if (g_splitterPos == 0) {
-                g_splitterPos = rect.right / 3;
-            }
-            UpdateSplitterPosition(hWnd);
-
-            UpdateTabViews();
-        }
+    case WM_DPICHANGED: {
+        UINT dpi = HIWORD(wParam);
+        DPIManager::SetDPI(static_cast<int>(dpi));
+        FontManager::UpdateDPI(static_cast<int>(dpi));
+        ApplyApplicationFonts();
+        const RECT* suggested = reinterpret_cast<const RECT*>(lParam);
+        SetWindowPos(hWnd, nullptr, suggested->left, suggested->top,
+            suggested->right - suggested->left, suggested->bottom - suggested->top,
+            SWP_NOZORDER | SWP_NOACTIVATE);
+        LayoutMainWindow(hWnd);
+        return 0;
     }
-    break;
-    case WM_CREATE:
-    {
+
+    case WM_GETMINMAXINFO: {
+        MINMAXINFO* info = reinterpret_cast<MINMAXINFO*>(lParam);
+        info->ptMinTrackSize.x = DPIManager::ScaleX(720);
+        info->ptMinTrackSize.y = DPIManager::ScaleY(520);
+        return 0;
     }
-    break;
-    case WM_PAINT:
-    {
-        PAINTSTRUCT ps;
-        HDC hdc = BeginPaint(hWnd, &ps);
-        EndPaint(hWnd, &ps);
-    }
-    break;
+
+    case WM_SETFOCUS:
+        if (hEditSearch && GetFocus() == hWnd) SetFocus(hEditSearch);
+        return 0;
+
     case WM_DESTROY:
+        LoadingManager::Shutdown();
         DragDropManager::Cleanup();
         FontManager::Cleanup();
         PostQuitMessage(0);
-        break;
-    default:
-        return DefWindowProc(hWnd, message, wParam, lParam);
+        return 0;
     }
-    return 0;
+    return DefWindowProcW(hWnd, message, wParam, lParam);
 }
 
-INT_PTR CALLBACK About(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
-{
+INT_PTR CALLBACK About(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam) {
     UNREFERENCED_PARAMETER(lParam);
-    switch (message)
-    {
-    case WM_INITDIALOG:
-        return (INT_PTR)TRUE;
-
-    case WM_COMMAND:
-        if (LOWORD(wParam) == IDOK || LOWORD(wParam) == IDCANCEL)
-        {
-            EndDialog(hDlg, LOWORD(wParam));
-            return (INT_PTR)TRUE;
-        }
-        break;
+    if (message == WM_COMMAND && (LOWORD(wParam) == IDOK || LOWORD(wParam) == IDCANCEL)) {
+        EndDialog(hDlg, LOWORD(wParam));
+        return TRUE;
     }
-    return (INT_PTR)FALSE;
+    return FALSE;
 }

@@ -154,6 +154,7 @@
     <ClInclude Include="src\Managers\GlobalVarAddressManager.h" />
     <ClInclude Include="src\Managers\HeaderViewManager.h" />
     <ClInclude Include="src\Managers\LanguageManager.h" />
+    <ClInclude Include="src\Managers\LoadingManager.h" />
     <ClInclude Include="src\Managers\ListViewManager.h" />
     <ClInclude Include="src\Managers\MenuManager.h" />
     <ClInclude Include="src\Managers\PDBDownloader.h" />
@@ -188,7 +189,9 @@
     <ClCompile Include="src\Managers\FunctionInfoDisplayManager.cpp" />
     <ClCompile Include="src\Managers\GlobalVarAddressManager.cpp" />
     <ClCompile Include="src\Managers\HeaderViewManager.cpp" />
+    <ClCompile Include="src\Managers\HeaderSyntaxSpans.cpp" />
     <ClCompile Include="src\Managers\LanguageManager.cpp" />
+    <ClCompile Include="src\Managers\LoadingManager.cpp" />
     <ClCompile Include="src\Managers\ListViewManager.cpp" />
     <ClCompile Include="src\Managers\MenuManager.cpp" />
     <ClCompile Include="src\Managers\PDBDownloader.cpp" />
