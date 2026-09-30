@@ -145,6 +145,7 @@
     <ClInclude Include="src\Managers\ConfigManager.h" />
     <ClInclude Include="src\Managers\CommandLineManager.h" />
     <ClInclude Include="src\Managers\ControlsManager.h" />
+    <ClInclude Include="src\Managers\ThemeManager.h" />
     <ClInclude Include="src\Managers\DragDropManager.h" />
     <ClInclude Include="src\Managers\DPIManager.h" />
     <ClInclude Include="src\Managers\ExportEnhancer.h" />
@@ -181,6 +182,7 @@
     <ClCompile Include="src\Managers\ConfigManager.cpp" />
     <ClCompile Include="src\Managers\CommandLineManager.cpp" />
     <ClCompile Include="src\Managers\ControlsManager.cpp" />
+    <ClCompile Include="src\Managers\ThemeManager.cpp" />
     <ClCompile Include="src\Managers\DragDropManager.cpp" />
     <ClCompile Include="src\Managers\DPIManager.cpp" />
     <ClCompile Include="src\Managers\ExportEnhancer.cpp" />

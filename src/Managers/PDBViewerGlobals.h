@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "framework.h"
 #include "PDBData.h"
@@ -45,6 +45,7 @@ extern int g_splitterPos;
 extern WCHAR g_szTabText1[64];
 extern WCHAR g_szTabText2[64];
 extern int g_currentTabIndex;
+extern int g_themeMode;
 
 extern ModuleInfo g_moduleInfo;
 extern bool g_pdbLoaded;

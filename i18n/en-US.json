@@ -19,6 +19,9 @@
     "menu_number_hex": "Number - Hexadecimal",
     "menu_number_dec": "Number - Decimal",
     "menu_number_both": "Number - Show Both",
+    "menu_theme": "Theme",
+    "menu_theme_light": "Light",
+    "menu_theme_dark": "Dark Modern",
     
     "menu_language": "Language(&L)",
     "menu_lang_zh_cn": "中文(简体)(&C)",

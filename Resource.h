@@ -68,6 +68,8 @@
 #define ID_NUMBER_HEX                   3101
 #define ID_NUMBER_DEC                   3102
 #define ID_NUMBER_BOTH                  3103
+#define ID_THEME_LIGHT                  3104
+#define ID_THEME_DARK                   3105
 
 #define ID_SEARCH_HISTORY_FIRST         4000
 #define ID_SEARCH_HISTORY_LAST          4099

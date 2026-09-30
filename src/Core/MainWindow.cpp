@@ -12,6 +12,7 @@
 #include "SettingsManager.h"
 #include "CommandLineManager.h"
 #include "LoadingManager.h"
+#include "ThemeManager.h"
 
 #pragma comment(lib, "comctl32.lib")
 #pragma comment(lib, "shell32.lib")
@@ -51,6 +52,9 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow, LPWSTR lpCmdLine) {
     ConfigManager::GetInstance().Load();
     g_numberMode = ConfigManager::GetInstance().GetNumberMode();
     g_expandBaseClasses = ConfigManager::GetInstance().GetExpandBaseClasses();
+    g_themeMode = ConfigManager::GetInstance().GetThemeMode();
+    ThemeManager::GetInstance().SetMode(
+        g_themeMode == 1 ? ThemeMode::Dark : ThemeMode::Light);
     g_currentLanguage = ConfigManager::GetInstance().GetLanguage();
     DPIManager::Initialize();
     FontManager::Initialize();
@@ -71,6 +75,7 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow, LPWSTR lpCmdLine) {
 
     CreateControls(hWnd);
     RebuildMenu(hWnd);
+    ThemeManager::GetInstance().Apply(hWnd);
     ShowWindow(hWnd, nCmdShow);
     UpdateWindow(hWnd);
     SetFocus(hEditSearch);
@@ -171,6 +176,16 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             CheckMenuRadioItem(GetSubMenu(GetMenu(hWnd), 1), ID_NUMBER_HEX, ID_NUMBER_BOTH, command, MF_BYCOMMAND);
             RefreshCurrentSelection();
             return 0;
+        case ID_THEME_LIGHT:
+        case ID_THEME_DARK:
+            g_themeMode = command == ID_THEME_DARK ? 1 : 0;
+            ThemeManager::GetInstance().SetMode(
+                g_themeMode == 1 ? ThemeMode::Dark : ThemeMode::Light);
+            ConfigManager::GetInstance().SetThemeMode(g_themeMode);
+            ConfigManager::GetInstance().Save();
+            RebuildMenu(hWnd);
+            ThemeManager::GetInstance().Apply(hWnd);
+            return 0;
         case ID_EXPAND_BASE_CLASSES:
             g_expandBaseClasses = !g_expandBaseClasses;
             ConfigManager::GetInstance().SetExpandBaseClasses(g_expandBaseClasses);
@@ -237,6 +252,20 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
     case WM_SIZE:
         LayoutMainWindow(hWnd);
         return 0;
+
+    case WM_CTLCOLORSTATIC:
+    case WM_CTLCOLORBTN:
+    case WM_CTLCOLOREDIT:
+    case WM_CTLCOLORLISTBOX: {
+        if (ThemeManager::GetInstance().GetMode() == ThemeMode::Dark) {
+            const ThemePalette& palette = ThemeManager::GetInstance().GetPalette();
+            HDC dc = reinterpret_cast<HDC>(wParam);
+            SetTextColor(dc, palette.text);
+            SetBkColor(dc, palette.surface);
+            return reinterpret_cast<LRESULT>(GetSysColorBrush(COLOR_WINDOW));
+        }
+        break;
+    }
 
     case WM_DPICHANGED: {
         UINT dpi = HIWORD(wParam);
