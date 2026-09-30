@@ -32,7 +32,6 @@ bool g_pdbLoaded = false;
 NumberDisplayMode g_numberMode = NUMBER_HEX;
 bool g_expandBaseClasses = false;
 std::wstring g_currentLanguage = L"zh-CN";
-int g_themeMode = 0;
 
 WNDPROC g_pOldEditProc = nullptr;
 WNDPROC g_pOldClearButtonProc = nullptr;

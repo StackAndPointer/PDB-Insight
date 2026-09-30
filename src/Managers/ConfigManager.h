@@ -9,7 +9,7 @@ struct ExportSettings {
     bool flattenNamespaces = true;
     bool expandAnonymousAggregates = true;
     bool removeVoidParams = true;
-    bool idaCompatible = false;
+    bool idaCompatible = true;
     bool includeEnumsInEnumsH = true;
 };
 
@@ -28,9 +28,6 @@ public:
 
     bool GetExpandBaseClasses() const { return m_expandBaseClasses; }
     void SetExpandBaseClasses(bool expand) { m_expandBaseClasses = expand; }
-
-    int GetThemeMode() const { return m_themeMode; }
-    void SetThemeMode(int mode) { m_themeMode = mode; }
 
     const ExportSettings& GetExportSettings() const { return m_exportSettings; }
     void SetExportSettings(const ExportSettings& settings) { m_exportSettings = settings; }
@@ -56,7 +53,6 @@ private:
     std::wstring m_language;
     NumberDisplayMode m_numberMode;
     bool m_expandBaseClasses;
-    int m_themeMode;
     bool m_useMirrorSource;
     std::wstring m_mirrorSourceUrl;
     ExportSettings m_exportSettings;

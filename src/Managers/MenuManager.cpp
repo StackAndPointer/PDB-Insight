@@ -78,14 +78,11 @@ void RebuildMenu(HWND hWnd)
     InsertMenuW(hMenuBar, 0, MF_BYPOSITION | MF_POPUP, (UINT_PTR)hFileMenu, LanguageManager::GetInstance().GetString(L"menu_file", L"文件(&F)").c_str());
     
     HMENU hViewMenu = CreatePopupMenu();
-    AppendMenuW(hViewMenu, MF_STRING | (g_expandBaseClasses ? MF_CHECKED : 0), ID_EXPAND_BASE_CLASSES, LanguageManager::GetInstance().GetString(L"menu_expand_base_classes", L"展开全部基类成员(&E)").c_str());
+    AppendMenuW(hViewMenu, MF_STRING | (g_expandBaseClasses ? MF_CHECKED : 0), ID_EXPAND_BASE_CLASSES, LanguageManager::GetInstance().GetString(L"menu_expand_base_classes", L"展开基类成员(&E)").c_str());
     AppendMenuW(hViewMenu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(hViewMenu, MF_STRING | (g_numberMode == NUMBER_HEX ? MF_CHECKED : 0), ID_NUMBER_HEX, LanguageManager::GetInstance().GetString(L"menu_number_hex", L"数值 - 十六进制(Hex)").c_str());
     AppendMenuW(hViewMenu, MF_STRING | (g_numberMode == NUMBER_DEC ? MF_CHECKED : 0), ID_NUMBER_DEC, LanguageManager::GetInstance().GetString(L"menu_number_dec", L"数值 - 十进制(Dec)").c_str());
     AppendMenuW(hViewMenu, MF_STRING | (g_numberMode == NUMBER_BOTH ? MF_CHECKED : 0), ID_NUMBER_BOTH, LanguageManager::GetInstance().GetString(L"menu_number_both", L"数值 - 两者都显示").c_str());
-    AppendMenuW(hViewMenu, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(hViewMenu, MF_STRING | (g_themeMode == 0 ? MF_CHECKED : 0), ID_THEME_LIGHT, LanguageManager::GetInstance().GetString(L"menu_theme_light", L"浅色").c_str());
-    AppendMenuW(hViewMenu, MF_STRING | (g_themeMode == 1 ? MF_CHECKED : 0), ID_THEME_DARK, LanguageManager::GetInstance().GetString(L"menu_theme_dark", L"现代深色").c_str());
     InsertMenuW(hMenuBar, 1, MF_BYPOSITION | MF_POPUP, (UINT_PTR)hViewMenu, LanguageManager::GetInstance().GetString(L"menu_view", L"显示(&V)").c_str());
     
     HMENU hLangMenu = CreatePopupMenu();

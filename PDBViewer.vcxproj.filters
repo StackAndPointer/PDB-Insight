@@ -60,9 +60,6 @@
     <ClInclude Include="src\Managers\ControlsManager.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="src\Managers\ThemeManager.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
     <ClInclude Include="src\Managers\ExportManager.h">
       <Filter>头文件</Filter>
     </ClInclude>
@@ -138,9 +135,6 @@
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="src\Managers\ControlsManager.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="src\Managers\ThemeManager.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="src\Managers\ExportManager.cpp">

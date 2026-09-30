@@ -14,7 +14,6 @@ ConfigManager::ConfigManager()
     : m_language(L"zh-CN")
     , m_numberMode(NUMBER_HEX)
     , m_expandBaseClasses(false)
-    , m_themeMode(0)
     , m_useMirrorSource(false) {
 }
 
@@ -52,9 +51,6 @@ bool ConfigManager::Load() {
                 }
             } else if (key == L"expandBaseClasses") {
                 m_expandBaseClasses = (value == L"1");
-            } else if (key == L"themeMode") {
-                int mode = _wtoi(value.c_str());
-                if (mode == 0 || mode == 1) m_themeMode = mode;
             } else if (key == L"exportFlattenNamespaces") {
                 m_exportSettings.flattenNamespaces = (value == L"1");
             } else if (key == L"exportExpandAnonymousAggregates") {
@@ -90,7 +86,6 @@ bool ConfigManager::Save() {
     file << L"language=" << m_language << L"\n";
     file << L"numberMode=" << static_cast<int>(m_numberMode) << L"\n";
     file << L"expandBaseClasses=" << (m_expandBaseClasses ? L"1" : L"0") << L"\n";
-    file << L"themeMode=" << m_themeMode << L"\n";
     file << L"exportFlattenNamespaces=" << (m_exportSettings.flattenNamespaces ? L"1" : L"0") << L"\n";
     file << L"exportExpandAnonymousAggregates=" << (m_exportSettings.expandAnonymousAggregates ? L"1" : L"0") << L"\n";
     file << L"exportRemoveVoidParams=" << (m_exportSettings.removeVoidParams ? L"1" : L"0") << L"\n";
