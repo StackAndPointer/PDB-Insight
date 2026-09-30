@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-x64:
+    name: Build x64 (${{ matrix.configuration }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        configuration: [Release, Debug]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Build PDB Insight (x64)
+        run: msbuild "PDBViewer.vcxproj" /m /t:Build /p:Configuration=${{ matrix.configuration }} /p:Platform=x64 /v:minimal /nologo
+
+      - name: Copy msdia140.dll next to the executable
+        shell: pwsh
+        run: |
+          .\.github\scripts\Copy-MsDia140.ps1 -OutputDirectory "x64\${{ matrix.configuration }}"
+
+      - name: Verify executable was produced
+        shell: pwsh
+        run: |
+          $exe = "x64\${{ matrix.configuration }}\PDB Insight.exe"
+          if (-not (Test-Path $exe)) { throw "Executable not found: $exe" }
+          Get-Item $exe | Select-Object FullName, Length
+          $dll = "x64\${{ matrix.configuration }}\msdia140.dll"
+          if (-not (Test-Path $dll)) { throw "msdia140.dll not staged: $dll" }
+
+      - name: Smoke test (CLI)
+        shell: pwsh
+        run: |
+          & "x64\${{ matrix.configuration }}\PDB Insight.exe" -h
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PDB-Insight-x64-${{ matrix.configuration }}
+          path: |
+            x64/${{ matrix.configuration }}/PDB Insight.exe
+            x64/${{ matrix.configuration }}/msdia140.dll
+          if-no-files-found: error

@@ -1,0 +1,58 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version tag (for example 1.4)"
+        required: true
+        default: "1.4"
+      prerelease:
+        description: "Mark this release as a pre-release"
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build x64 Release and publish
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Build PDB Insight (Release | x64)
+        run: msbuild "PDBViewer.vcxproj" /m /t:Build /p:Configuration=Release /p:Platform=x64 /v:minimal /nologo
+
+      - name: Stage release package (with msdia140.dll)
+        shell: pwsh
+        run: |
+          $stage = "package"
+          Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path $stage | Out-Null
+
+          Copy-Item "x64\Release\PDB Insight.exe" (Join-Path $stage "PDB Insight.exe") -Force
+          .\.github\scripts\Copy-MsDia140.ps1 -OutputDirectory $stage
+          Copy-Item "README.md" (Join-Path $stage "README.md") -Force
+          Copy-Item "LICENSE" (Join-Path $stage "LICENSE") -Force
+
+          $zip = "PDB-Insight-${{ inputs.version }}-x64.zip"
+          Compress-Archive -Path (Join-Path $stage "*") -DestinationPath $zip -Force
+          Get-ChildItem $stage | Select-Object Name, Length
+          Get-Item $zip | Select-Object FullName, Length
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ inputs.version }}
+          name: PDB Insight v${{ inputs.version }}
+          prerelease: ${{ inputs.prerelease }}
+          generate_release_notes: true
+          files: PDB-Insight-${{ inputs.version }}-x64.zip
