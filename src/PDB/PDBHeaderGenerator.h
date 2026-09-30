@@ -24,11 +24,15 @@ public:
     static std::wstring GeneratePureCStructDeclaration(const ClassInfo& classInfo, const ExportSettings& settings, NumberDisplayMode numberMode, const ModuleInfo* moduleInfo = nullptr);
     static std::wstring FormatNumber(ULONGLONG value, NumberDisplayMode mode);
     static std::wstring FormatOffset(LONG offset, NumberDisplayMode mode);
+    static LONG ResolveOffset(LONG offset, LONG baseOffset = 0);
     static std::wstring FlattenName(const std::wstring& name);
     static std::wstring ProcessTypeName(const std::wstring& name, const ExportSettings& settings);
     static std::wstring RenderDeclaration(const TypeRef& type, const std::wstring& name);
     static std::wstring RemoveVoidParams(const std::wstring& signature);
     static std::wstring AccessTypeToString(AccessType access);
+    static void CollectAllMembersFromOffsetZero(const ClassInfo& classInfo,
+                                                const ModuleInfo* moduleInfo,
+                                                std::vector<MemberVariableInfo>& out);
 
 private:
     static std::wstring EscapeForHeader(const std::wstring& str);

@@ -295,79 +295,48 @@ void PopulateListView(HTREEITEM hItem)
             
             if (g_expandBaseClasses && !pClass->baseClasses.empty())
             {
-                for (const auto& base : pClass->baseClasses)
+                std::vector<MemberVariableInfo> allMembers;
+                PDBHeaderGenerator::CollectAllMembersFromOffsetZero(
+                    *pClass, &g_moduleInfo, allMembers);
+                for (const auto& member : allMembers)
                 {
-                    const ClassInfo* baseClass = nullptr;
-                    for (const auto& cls : g_moduleInfo.classes) {
-                        if (cls.name == base.name) {
-                            baseClass = &cls;
-                            break;
-                        }
-                    }
-                    if (!baseClass) {
-                        for (const auto& str : g_moduleInfo.structs) {
-                            if (str.name == base.name) {
-                                baseClass = &str;
-                                break;
-                            }
-                        }
-                    }
-                    if (!baseClass) {
-                        for (const auto& uni : g_moduleInfo.unions) {
-                            if (uni.name == base.name) {
-                                baseClass = &uni;
-                                break;
-                            }
-                        }
-                    }
-                    
-                    if (baseClass)
+                    std::wstringstream ssMember;
+                    ssMember << PDBParser::AccessTypeToString(member.access) << L" "
+                             << (member.isStatic ? L"static " : L"")
+                             << member.type << L" " << member.name;
+                    std::wstringstream ssOffset;
+                    ssOffset << LanguageManager::GetInstance().GetString(L"col_offset", L"偏移: ")
+                             << PDBHeaderGenerator::FormatOffset(member.offset, g_numberMode);
+                    if (member.bitSize > 0)
                     {
-                        addItem(L"", L"");
-                        addItem(LanguageManager::GetInstance().GetString(L"prop_base_class_prefix", L"--- 基类: ") + base.name + LanguageManager::GetInstance().GetString(L"prop_base_class_suffix", L" ---"), L"");
-                        
-                        for (size_t i = 0; i < baseClass->members.size(); ++i)
-                        {
-                            const auto& member = baseClass->members[i];
-                            std::wstringstream ssMember;
-                            ssMember << PDBParser::AccessTypeToString(member.access) << L" " 
-                                     << member.type << L" " << member.name;
-                            std::wstringstream ssOffset;
-                            ssOffset << LanguageManager::GetInstance().GetString(L"col_offset", L"偏移: ") << PDBHeaderGenerator::FormatOffset(member.offset + base.offset, g_numberMode);
-                            if (member.bitSize > 0)
-                            {
-                                ssOffset << L", " << LanguageManager::GetInstance().GetString(L"col_bit_position", L"位位置: ") << member.bitPosition 
-                                         << L", " << LanguageManager::GetInstance().GetString(L"col_bit_size", L"位大小: ") << member.bitSize;
-                            }
-                            
-                            addItem(ssMember.str(), ssOffset.str());
-                        }
+                        ssOffset << L", " << LanguageManager::GetInstance().GetString(L"col_bit_position", L"位位置: ") << member.bitPosition
+                                 << L", " << LanguageManager::GetInstance().GetString(L"col_bit_size", L"位大小: ") << member.bitSize;
                     }
+                    addItem(ssMember.str(), ssOffset.str());
                 }
                 
                 addItem(L"", L"");
-                addItem(LanguageManager::GetInstance().GetString(L"prop_current_class_members", L"--- 当前类成员 ---"), L"");
             }
             else
             {
                 addItem(LanguageManager::GetInstance().GetString(L"prop_members_list", L"--- 成员列表 ---"), L"");
-            }
-            
-            for (size_t i = 0; i < pClass->members.size(); ++i)
-            {
-                const auto& member = pClass->members[i];
-                std::wstringstream ssMember;
-                ssMember << PDBParser::AccessTypeToString(member.access) << L" " 
-                         << member.type << L" " << member.name;
-                std::wstringstream ssOffset;
-                ssOffset << LanguageManager::GetInstance().GetString(L"col_offset", L"偏移: ") << PDBHeaderGenerator::FormatOffset(member.offset, g_numberMode);
-                if (member.bitSize > 0)
+                for (size_t i = 0; i < pClass->members.size(); ++i)
                 {
-                    ssOffset << L", " << LanguageManager::GetInstance().GetString(L"col_bit_position", L"位位置: ") << member.bitPosition 
-                             << L", " << LanguageManager::GetInstance().GetString(L"col_bit_size", L"位大小: ") << member.bitSize;
+                    const auto& member = pClass->members[i];
+                    std::wstringstream ssMember;
+                    ssMember << PDBParser::AccessTypeToString(member.access) << L" "
+                             << (member.isStatic ? L"static " : L"")
+                             << member.type << L" " << member.name;
+                    std::wstringstream ssOffset;
+                    ssOffset << LanguageManager::GetInstance().GetString(L"col_offset", L"偏移: ")
+                             << PDBHeaderGenerator::FormatOffset(member.offset, g_numberMode);
+                    if (member.bitSize > 0)
+                    {
+                        ssOffset << L", " << LanguageManager::GetInstance().GetString(L"col_bit_position", L"位位置: ") << member.bitPosition
+                                 << L", " << LanguageManager::GetInstance().GetString(L"col_bit_size", L"位大小: ") << member.bitSize;
+                    }
+                    addItem(ssMember.str(), ssOffset.str());
                 }
-                
-                addItem(ssMember.str(), ssOffset.str());
             }
         }
     }

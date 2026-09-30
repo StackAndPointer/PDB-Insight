@@ -1,7 +1,8 @@
-#include "PDBHeaderGenerator.h"
+﻿#include "PDBHeaderGenerator.h"
 #include "PDBParser.h"
 #include <algorithm>
 #include <set>
+#include <functional>
 
 namespace {
 std::wstring RenderDeclarationImpl(const TypeRef& type, const std::wstring& name) {
@@ -63,13 +64,15 @@ void AppendAccessLabel(std::wostringstream& ss, AccessType access, int indentLev
 
 void AppendMemberDeclaration(std::wostringstream& ss, const MemberVariableInfo& member,
                              NumberDisplayMode numberMode, int indentLevel,
-                             bool includeOffset, const ExportSettings& settings);
+                             bool includeOffset, const ExportSettings& settings,
+                             LONG offsetBase = 0, bool offsetKnown = true);
 
 void AppendMemberCollection(std::wostringstream& ss,
                             const std::vector<MemberVariableInfo>& members,
                             NumberDisplayMode numberMode, int indentLevel,
                             bool includeOffset, AccessType defaultAccess,
-                            bool forceAccessLabels, const ExportSettings& settings) {
+                            bool forceAccessLabels, const ExportSettings& settings,
+                            LONG offsetBase = 0, bool offsetKnown = true) {
     AccessType currentAccess = PDB_ACCESS_UNKNOWN;
     for (const auto& member : members) {
         const bool needsLabel = member.access != PDB_ACCESS_UNKNOWN &&
@@ -79,14 +82,20 @@ void AppendMemberCollection(std::wostringstream& ss,
             currentAccess = member.access;
         }
         AppendMemberDeclaration(ss, member, numberMode, indentLevel + 1, includeOffset,
-                                settings);
+                                settings, offsetBase, offsetKnown);
     }
 }
 
 void AppendMemberDeclaration(std::wostringstream& ss, const MemberVariableInfo& member,
                              NumberDisplayMode numberMode, int indentLevel,
-                             bool includeOffset, const ExportSettings& settings) {
+                             bool includeOffset, const ExportSettings& settings,
+                             LONG offsetBase, bool offsetKnown) {
     const std::wstring indent(indentLevel * 4, L' ');
+    const bool absoluteOffsetKnown = offsetKnown && member.offset >= 0;
+    const LONG absoluteOffset = absoluteOffsetKnown
+        ? PDBHeaderGenerator::ResolveOffset(member.offset, offsetBase)
+        : -1;
+    const bool hasAbsoluteOffset = absoluteOffset >= 0;
     if (member.anonymousType && settings.expandAnonymousAggregates) {
         const ClassInfo& aggregate = *member.anonymousType;
         const AccessType defaultAccess = aggregate.isStruct || aggregate.isUnion
@@ -96,25 +105,31 @@ void AppendMemberDeclaration(std::wostringstream& ss, const MemberVariableInfo& 
         AppendMemberCollection(ss, aggregate.members, numberMode, indentLevel,
                                includeOffset, defaultAccess,
                                !aggregate.isStruct && !aggregate.isUnion,
-                               settings);
-        ss << indent << L"};\r\n";
-        return;
-    }
-
-    if (member.anonymousType) {
-        ss << indent << L"// Anonymous struct/union member (expansion disabled)";
-        if (includeOffset && member.offset >= 0) {
-            ss << L" // " << PDBHeaderGenerator::FormatOffset(member.offset, numberMode);
+                               settings, absoluteOffset, hasAbsoluteOffset);
+        ss << indent << L"};";
+        if (includeOffset && hasAbsoluteOffset) {
+            ss << L" // " << PDBHeaderGenerator::FormatOffset(absoluteOffset, numberMode);
         }
         ss << L"\r\n";
         return;
     }
 
-    ss << indent << PDBHeaderGenerator::RenderDeclaration(member.typeRef, member.name);
+    if (member.anonymousType) {
+        ss << indent << L"// Anonymous struct/union member (expansion disabled)";
+        if (includeOffset && !member.isStatic && hasAbsoluteOffset) {
+            ss << L" // " << PDBHeaderGenerator::FormatOffset(absoluteOffset, numberMode);
+        }
+        ss << L"\r\n";
+        return;
+    }
+
+    ss << indent;
+    if (member.isStatic) ss << L"static ";
+    ss << PDBHeaderGenerator::RenderDeclaration(member.typeRef, member.name);
     if (member.isBitfield && member.bitSize > 0) ss << L" : " << member.bitSize;
     ss << L";";
-    if (includeOffset && member.offset >= 0) {
-        ss << L" // " << PDBHeaderGenerator::FormatOffset(member.offset, numberMode);
+    if (includeOffset && !member.isStatic && hasAbsoluteOffset) {
+        ss << L" // " << PDBHeaderGenerator::FormatOffset(absoluteOffset, numberMode);
     }
     ss << L"\r\n";
 }
@@ -238,26 +253,40 @@ std::wstring PDBHeaderGenerator::GeneratePureCStructDeclaration(
     std::vector<MemberVariableInfo> allMembers;
 
     if (moduleInfo) {
-        std::vector<std::pair<const ClassInfo*, LONG>> classChain;
-        std::set<const ClassInfo*> visited;
-        const ClassInfo* current = &classInfo;
-        LONG currentOffset = 0;
-        while (current && visited.insert(current).second) {
-            classChain.push_back({current, currentOffset});
-            if (current->baseClasses.empty()) break;
-            const BaseClassInfo& firstBase = current->baseClasses[0];
-            currentOffset += firstBase.offset;
-            current = FindClassInfo(firstBase.name, moduleInfo);
-        }
-        for (auto it = classChain.rbegin(); it != classChain.rend(); ++it) {
-            for (const auto& member : it->first->members) {
-                MemberVariableInfo expanded = member;
-                if (expanded.offset >= 0) expanded.offset += it->second;
-                allMembers.push_back(std::move(expanded));
-            }
-        }
+        std::set<std::pair<const ClassInfo*, LONG>> activeClasses;
+        std::function<void(const ClassInfo&, LONG, bool, int)> collectMembers =
+            [&](const ClassInfo& current, LONG currentOffset, bool offsetKnown, int depth) {
+                if (depth > 32 || !activeClasses.insert({&current, currentOffset}).second) return;
+
+                // Virtual bases do not have a fixed offset in the complete object.
+                // They cannot be represented safely in a flattened C declaration.
+                for (const auto& base : current.baseClasses) {
+                    if (base.inheritanceType == PDB_INHERITANCE_VIRTUAL) continue;
+                    const ClassInfo* baseClass = FindClassInfo(base.name, moduleInfo);
+                    if (!baseClass) continue;
+                    const LONG baseOrigin = offsetKnown
+                        ? PDBHeaderGenerator::ResolveOffset(base.offset, currentOffset)
+                        : -1;
+                    collectMembers(*baseClass, baseOrigin, baseOrigin >= 0, depth + 1);
+                }
+
+                for (const auto& member : current.members) {
+                    // Static members do not contribute to the C object layout.
+                    if (member.isStatic) continue;
+                    MemberVariableInfo expanded = member;
+                    expanded.offset = offsetKnown
+                        ? PDBHeaderGenerator::ResolveOffset(expanded.offset, currentOffset)
+                        : -1;
+                    allMembers.push_back(std::move(expanded));
+                }
+
+                activeClasses.erase({&current, currentOffset});
+            };
+        collectMembers(classInfo, 0, true, 0);
     } else {
-        allMembers = classInfo.members;
+        for (const auto& member : classInfo.members) {
+            if (!member.isStatic) allMembers.push_back(member);
+        }
     }
 
     ss << (classInfo.isUnion ? L"union " : L"struct ") << className << L"\r\n{\r\n";
@@ -329,8 +358,41 @@ std::wstring PDBHeaderGenerator::FormatNumber(ULONGLONG value, NumberDisplayMode
     return ss.str();
 }
 
+LONG PDBHeaderGenerator::ResolveOffset(LONG offset, LONG baseOffset) {
+    if (offset < 0 || baseOffset < 0) return -1;
+    const LONGLONG resolved = static_cast<LONGLONG>(offset) + baseOffset;
+    if (resolved < 0 || resolved > MAXLONG) return -1;
+    return static_cast<LONG>(resolved);
+}
+
 std::wstring PDBHeaderGenerator::FormatOffset(LONG offset, NumberDisplayMode mode) {
+    if (offset < 0) return L"N/A";
     return FormatNumber(static_cast<ULONGLONG>(offset), mode);
+}
+
+void PDBHeaderGenerator::CollectAllMembersFromOffsetZero(
+    const ClassInfo& classInfo, const ModuleInfo* moduleInfo,
+    std::vector<MemberVariableInfo>& out) {
+    std::set<std::pair<const ClassInfo*, LONG>> active;
+    std::function<void(const ClassInfo&, LONG, int)> collect =
+        [&](const ClassInfo& current, LONG currentOffset, int depth) {
+            if (depth > 32 || !active.insert({&current, currentOffset}).second) return;
+            for (const auto& base : current.baseClasses) {
+                if (base.inheritanceType == PDB_INHERITANCE_VIRTUAL) continue;
+                const ClassInfo* baseClass = moduleInfo
+                    ? FindClassInfo(base.name, moduleInfo) : nullptr;
+                if (!baseClass || base.offset < 0) continue;
+                collect(*baseClass, ResolveOffset(base.offset, currentOffset), depth + 1);
+            }
+            for (const auto& member : current.members) {
+                if (member.isStatic) continue;
+                MemberVariableInfo expanded = member;
+                expanded.offset = ResolveOffset(member.offset, currentOffset);
+                out.push_back(std::move(expanded));
+            }
+            active.erase({&current, currentOffset});
+        };
+    collect(classInfo, 0, 0);
 }
 
 const ClassInfo* PDBHeaderGenerator::FindClassInfo(const std::wstring& className,
@@ -353,53 +415,14 @@ std::wstring PDBHeaderGenerator::GenerateClassDeclaration(
     ss << L"\r\n{\r\n";
 
     if (expandBaseClasses && moduleInfo) {
-        for (const auto& base : classInfo.baseClasses) {
-            const ClassInfo* baseClass = FindClassInfo(base.name, moduleInfo);
-            if (!baseClass) continue;
-            const std::wstring baseName = settings.flattenNamespaces ? FlattenName(base.name) : base.name;
-            ss << L"\r\n    // --- Base class: " << baseName << L" --- \r\n";
-            std::vector<MemberVariableInfo> expandedMembers = baseClass->members;
-            for (auto& member : expandedMembers) {
-                if (member.offset >= 0) member.offset += base.offset;
-            }
-            AppendMemberCollection(ss, expandedMembers, numberMode, 0, true,
-                                   PDB_ACCESS_PRIVATE, true, settings);
-            ss << L"\r\n    // --- End of base class: " << baseName << L" --- \r\n";
-        }
-    }
-
-    if (!classInfo.members.empty() || classInfo.virtualFunctions.empty()) {
-        if (expandBaseClasses && !classInfo.baseClasses.empty()) {
-            ss << L"\r\n    // --- Current class members --- \r\n";
-        }
+        std::vector<MemberVariableInfo> expandedMembers;
+        CollectAllMembersFromOffsetZero(classInfo, moduleInfo, expandedMembers);
+        AppendMemberCollection(ss, expandedMembers, numberMode, 0, true,
+                               PDB_ACCESS_PRIVATE, true, settings);
+    } else {
         AppendMemberCollection(ss, classInfo.members, numberMode, 0, true,
                                PDB_ACCESS_PRIVATE, true, settings);
     }
-
-    if (!classInfo.virtualFunctions.empty()) {
-        ss << L"\r\n    // --- Virtual Functions --- \r\n";
-        AccessType currentAccess = PDB_ACCESS_UNKNOWN;
-        for (const auto& vfunc : classInfo.virtualFunctions) {
-            if (vfunc.access != currentAccess) {
-                currentAccess = vfunc.access;
-                AppendAccessLabel(ss, currentAccess, 0);
-            }
-            ss << L"    virtual " << RenderDeclaration(vfunc.returnTypeRef, L"") << L" "
-               << vfunc.name << L"(";
-            for (size_t i = 0; i < vfunc.parameters.size(); ++i) {
-                if (i > 0) ss << L", ";
-                ss << RenderDeclaration(vfunc.parameters[i].typeRef, vfunc.parameters[i].name);
-            }
-            ss << L")" << (vfunc.isPure ? L" = 0" : L"") << L";";
-            if (vfunc.rva != 0) ss << L" // RVA: 0x" << std::hex << vfunc.rva;
-            if (vfunc.virtualAddress != 0) {
-                if (vfunc.rva != 0) ss << L", ";
-                ss << L" VA: 0x" << std::hex << vfunc.virtualAddress;
-            }
-            ss << L"\r\n";
-        }
-    }
-
     ss << L"};\r\n";
     return ss.str();
 }
@@ -415,25 +438,11 @@ std::wstring PDBHeaderGenerator::GenerateStructDeclaration(
     ss << L"\r\n{\r\n";
 
     if (expandBaseClasses && moduleInfo) {
-        for (const auto& base : structInfo.baseClasses) {
-            const ClassInfo* baseClass = FindClassInfo(base.name, moduleInfo);
-            if (!baseClass) continue;
-            const std::wstring baseName = settings.flattenNamespaces ? FlattenName(base.name) : base.name;
-            ss << L"\r\n    // --- Base struct: " << baseName << L" --- \r\n";
-            std::vector<MemberVariableInfo> expandedMembers = baseClass->members;
-            for (auto& member : expandedMembers) {
-                if (member.offset >= 0) member.offset += base.offset;
-            }
-            AppendMemberCollection(ss, expandedMembers, numberMode, 0, true,
-                                   PDB_ACCESS_PUBLIC, false, settings);
-            ss << L"\r\n    // --- End of base struct: " << baseName << L" --- \r\n";
-        }
-    }
-
-    if (!structInfo.members.empty() || structInfo.baseClasses.empty()) {
-        if (expandBaseClasses && !structInfo.baseClasses.empty()) {
-            ss << L"\r\n    // --- Current struct members --- \r\n";
-        }
+        std::vector<MemberVariableInfo> expandedMembers;
+        CollectAllMembersFromOffsetZero(structInfo, moduleInfo, expandedMembers);
+        AppendMemberCollection(ss, expandedMembers, numberMode, 0, true,
+                               PDB_ACCESS_PUBLIC, false, settings);
+    } else {
         AppendMemberCollection(ss, structInfo.members, numberMode, 0, true,
                                PDB_ACCESS_PUBLIC, false, settings);
     }
