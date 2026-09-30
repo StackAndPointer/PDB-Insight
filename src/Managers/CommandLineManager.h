@@ -34,6 +34,9 @@ public:
     bool ShouldExportClass() const;
     bool ShouldListClasses() const;
 
+    bool ShouldRunCommandLine() const;
+    int RunCommandLine() const;
+
 private:
     CommandLineManager() {}
     ~CommandLineManager() = default;

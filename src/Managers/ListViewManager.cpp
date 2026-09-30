@@ -277,7 +277,8 @@ void PopulateListView(HTREEITEM hItem)
                 {
                     const auto& vfunc = pClass->virtualFunctions[i];
                     std::wstringstream ssVFunc;
-                    ssVFunc << L"[" << vfunc.vtableIndex << L"] " << vfunc.returnType << L" " << vfunc.name;
+                    ssVFunc << LanguageManager::GetInstance().GetString(L"comment_vtable_slot_prefix", L"// [slot ")
+                            << vfunc.vtableIndex << L"] " << vfunc.returnType << L" " << vfunc.name;
                     std::wstringstream ssAddr;
                     if (vfunc.rva != 0)
                     {
@@ -297,16 +298,25 @@ void PopulateListView(HTREEITEM hItem)
             {
                 std::vector<MemberVariableInfo> allMembers;
                 PDBHeaderGenerator::CollectAllMembersFromOffsetZero(
-                    *pClass, &g_moduleInfo, allMembers);
+                    *pClass, &g_moduleInfo, L"", allMembers);
+                std::wstring activeBaseClass;
                 for (const auto& member : allMembers)
                 {
+                    if (member.fromBaseClass && member.baseClassName != activeBaseClass)
+                    {
+                        if (!activeBaseClass.empty()) addItem(L"", L"");
+                        activeBaseClass = member.baseClassName;
+                        addItem(LanguageManager::GetInstance().GetString(
+                                    L"prop_expanded_from_base", L"--- Expanded from base class: ") +
+                                activeBaseClass + L" ---", L"");
+                    }
                     std::wstringstream ssMember;
                     ssMember << PDBParser::AccessTypeToString(member.access) << L" "
                              << (member.isStatic ? L"static " : L"")
                              << member.type << L" " << member.name;
                     std::wstringstream ssOffset;
                     ssOffset << LanguageManager::GetInstance().GetString(L"col_offset", L"偏移: ")
-                             << PDBHeaderGenerator::FormatOffset(member.offset, g_numberMode);
+                             << PDBHeaderGenerator::FormatOffset(member.offset, g_numberMode, member.offsetReconstructed);
                     if (member.bitSize > 0)
                     {
                         ssOffset << L", " << LanguageManager::GetInstance().GetString(L"col_bit_position", L"位位置: ") << member.bitPosition
@@ -314,8 +324,7 @@ void PopulateListView(HTREEITEM hItem)
                     }
                     addItem(ssMember.str(), ssOffset.str());
                 }
-                
-                addItem(L"", L"");
+                if (!activeBaseClass.empty()) addItem(L"", L"");
             }
             else
             {
@@ -329,7 +338,7 @@ void PopulateListView(HTREEITEM hItem)
                              << member.type << L" " << member.name;
                     std::wstringstream ssOffset;
                     ssOffset << LanguageManager::GetInstance().GetString(L"col_offset", L"偏移: ")
-                             << PDBHeaderGenerator::FormatOffset(member.offset, g_numberMode);
+                             << PDBHeaderGenerator::FormatOffset(member.offset, g_numberMode, member.offsetReconstructed);
                     if (member.bitSize > 0)
                     {
                         ssOffset << L", " << LanguageManager::GetInstance().GetString(L"col_bit_position", L"位位置: ") << member.bitPosition

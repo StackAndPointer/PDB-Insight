@@ -389,8 +389,8 @@ void PDBParser::ParseClassDetails(IDiaSymbol* pClass, ClassInfo& classInfo) {
             pBase->get_virtualBaseClass(&isVirtual);
             baseInfo.inheritanceType = isVirtual ? PDB_INHERITANCE_VIRTUAL : PDB_INHERITANCE_NORMAL;
 
-            LONG offset = 0;
-            pBase->get_offset(&offset);
+            LONG offset = -1;
+            if (FAILED(pBase->get_offset(&offset)) || offset < 0) offset = -1;
             baseInfo.offset = offset;
 
             DWORD access = 0;
@@ -454,7 +454,13 @@ void PDBParser::ParseMemberVariables(IDiaSymbol* owner, std::vector<MemberVariab
         if (SUCCEEDED(data->get_type(&type)) && type) {
             member.typeRef = BuildTypeRef(type, depth + 1);
             member.type = PDBHeaderGenerator::RenderDeclaration(member.typeRef, L"");
-
+            ULONGLONG typeSize = 0;
+            if (SUCCEEDED(type->get_length(&typeSize)) && typeSize > 0) {
+                member.typeSize = typeSize;
+                member.typeSizeKnown = true;
+            }
+            member.typeAlignment = InferTypeAlignment(type, member.typeSizeKnown ? member.typeSize : 0);
+            member.typeAlignmentKnown = member.typeAlignment > 0;
             DWORD typeTag = SymTagNull;
             type->get_symTag(&typeTag);
             if (typeTag == SymTagUDT && IsAnonymousTypeName(GetSymbolName(type))) {
@@ -474,24 +480,110 @@ void PDBParser::ParseMemberVariables(IDiaSymbol* owner, std::vector<MemberVariab
             type->Release();
         }
 
-        data->get_offset(&member.offset);
+        LONG memberOffset = -1;
+        DWORD dataKind = DataIsUnknown;
+        const bool hasDataKind = SUCCEEDED(data->get_dataKind(&dataKind));
+        DWORD locationType = LocIsNull;
+        const bool hasLocation = SUCCEEDED(data->get_locationType(&locationType));
+        member.isStatic = (hasDataKind &&
+            (dataKind == DataIsStaticMember || dataKind == DataIsConstant)) ||
+            (hasLocation && (locationType == LocIsStatic ||
+                             locationType == LocIsTLS ||
+                             locationType == LocIsConstant));
+
+        const bool hasInstanceOffset = !member.isStatic && hasLocation &&
+            locationType == LocIsThisRel &&
+            SUCCEEDED(data->get_offset(&memberOffset)) && memberOffset >= 0;
+        if (!hasInstanceOffset) memberOffset = -1;
+        member.offset = memberOffset;
         DWORD access = 0;
         data->get_access(&access);
         member.access = GetAccessType(access);
         member.isBitfield = data->get_bitPosition(&member.bitPosition) == S_OK;
         ULONGLONG bitSize = 0;
-        data->get_length(&bitSize);
-        member.bitSize = static_cast<DWORD>(bitSize);
+        if (member.isBitfield && SUCCEEDED(data->get_length(&bitSize))) {
+            member.bitSize = static_cast<DWORD>(bitSize);
+        }
         members.push_back(std::move(member));
         data->Release();
     }
     enumData->Release();
+
+    ReconstructMemberOffsetsIfNeeded(members);
 }
 
 bool PDBParser::IsAnonymousTypeName(const std::wstring& name) const {
     return name.empty() || name == L"anonymous" ||
            name.find(L"<anonymous") != std::wstring::npos ||
            name.find(L"<unnamed") != std::wstring::npos;
+}
+
+void PDBParser::ReconstructMemberOffsetsIfNeeded(std::vector<MemberVariableInfo>& members) {
+    bool hasLayoutConflict = false;
+    LONG previousKnownOffset = -1;
+    for (const auto& member : members) {
+        if (member.isStatic || member.offset < 0) continue;
+        if (previousKnownOffset >= 0 && member.offset <= previousKnownOffset) {
+            hasLayoutConflict = true;
+            break;
+        }
+        previousKnownOffset = member.offset;
+    }
+    if (!hasLayoutConflict) return;
+
+    LONG nextOffset = -1;
+    for (size_t index = 0; index < members.size(); ++index) {
+        MemberVariableInfo& member = members[index];
+        if (member.isStatic || member.offset < 0) continue;
+
+        const LONG reportedOffset = member.offset;
+        if (nextOffset >= 0 && reportedOffset < nextOffset) {
+            if (!member.typeSizeKnown || member.typeSize == 0) continue;
+
+            ULONGLONG alignment = member.typeAlignmentKnown ? member.typeAlignment : 1;
+            if (alignment == 0) alignment = 1;
+            const ULONGLONG mask = alignment - 1;
+            const ULONGLONG aligned = (nextOffset + mask) & ~mask;
+            if (aligned > static_cast<ULONGLONG>(LONG_MAX)) continue;
+
+            member.offset = static_cast<LONG>(aligned);
+            member.offsetReconstructed = true;
+            member.typeAlignment = alignment;
+        }
+
+        if (!member.typeSizeKnown || member.typeSize == 0) {
+            nextOffset = -1;
+            continue;
+        }
+        const ULONGLONG end = static_cast<ULONGLONG>(member.offset) + member.typeSize;
+        nextOffset = end <= static_cast<ULONGLONG>(LONG_MAX) ? static_cast<LONG>(end) : -1;
+    }
+}
+
+ULONGLONG PDBParser::InferTypeAlignment(IDiaSymbol* pType, ULONGLONG typeSize) const {
+    if (!pType) return typeSize == 0 ? 0 : (std::min)(typeSize, 8ULL);
+
+    DWORD tag = SymTagNull;
+    pType->get_symTag(&tag);
+    if (tag == SymTagPointerType) return 4;
+    if (tag == SymTagArrayType || tag == SymTagFunctionType) return 4;
+    if (tag == SymTagEnum) {
+        ULONGLONG enumSize = 0;
+        if (SUCCEEDED(pType->get_length(&enumSize)) && enumSize > 0) {
+            return (std::min)(enumSize, 8ULL);
+        }
+        return 4;
+    }
+    if (tag == SymTagBaseType) {
+        return typeSize == 0 ? 1 : (std::min)(typeSize, 8ULL);
+    }
+    if (tag == SymTagUDT) {
+        DWORD udtKind = UdtStruct;
+        pType->get_udtKind(&udtKind);
+        if (udtKind == UdtUnion) return typeSize == 0 ? 1 : (std::min)(typeSize, 8ULL);
+        return typeSize == 0 ? 1 : (std::min)(typeSize, 8ULL);
+    }
+    return typeSize == 0 ? 1 : (std::min)(typeSize, 8ULL);
 }
 
 namespace {

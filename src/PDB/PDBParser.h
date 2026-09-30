@@ -44,9 +44,11 @@ private:
     void ParseGlobalVariables(IDiaSymbol* pGlobal, ModuleInfo& moduleInfo);
     void ParseClassDetails(IDiaSymbol* pClass, ClassInfo& classInfo);
     void ParseMemberVariables(IDiaSymbol* owner, std::vector<MemberVariableInfo>& members, int depth = 0);
+    void ReconstructMemberOffsetsIfNeeded(std::vector<MemberVariableInfo>& members);
     void ParseFunctionDetails(IDiaSymbol* pFunction, FunctionInfo& funcInfo);
     void ParseParameters(IDiaSymbol* pFunction, std::vector<ParameterInfo>& params);
     TypeRef BuildTypeRef(IDiaSymbol* pType, int depth = 0);
+    ULONGLONG InferTypeAlignment(IDiaSymbol* pType, ULONGLONG typeSize) const;
     bool IsAnonymousTypeName(const std::wstring& name) const;
     std::wstring GetSymbolName(IDiaSymbol* pSymbol);
     std::wstring GetUndecoratedName(IDiaSymbol* pSymbol);

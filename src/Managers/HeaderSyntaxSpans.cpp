@@ -2,6 +2,131 @@
 #include <algorithm>
 #include <unordered_set>
 
+namespace {
+
+bool IsIdentStart(WCHAR c) {
+    return (c >= L'a' && c <= L'z') || (c >= L'A' && c <= L'Z') || c == L'_';
+}
+
+bool IsIdentChar(WCHAR c) {
+    return IsIdentStart(c) || (c >= L'0' && c <= L'9');
+}
+
+struct LexedIdentifier {
+    size_t begin = 0;
+    size_t end = 0;
+    std::wstring text;
+};
+
+std::vector<LexedIdentifier> LexIdentifiers(const std::wstring& sourceText,
+                                            const std::vector<SyntaxSpan>& ignored) {
+    std::vector<LexedIdentifier> identifiers;
+    size_t ignoredIndex = 0;
+    size_t pos = 0;
+    while (pos < sourceText.size()) {
+        while (ignoredIndex < ignored.size() && ignored[ignoredIndex].end <= pos) {
+            ++ignoredIndex;
+        }
+        if (ignoredIndex < ignored.size() && ignored[ignoredIndex].begin <= pos) {
+            pos = ignored[ignoredIndex].end;
+            continue;
+        }
+        if (!IsIdentStart(sourceText[pos])) {
+            ++pos;
+            continue;
+        }
+        size_t end = pos;
+        while (end < sourceText.size() && IsIdentChar(sourceText[end])) ++end;
+        identifiers.push_back({pos, end, sourceText.substr(pos, end - pos)});
+        pos = end;
+    }
+    return identifiers;
+}
+
+size_t SkipWhitespace(const std::wstring& text, size_t pos) {
+    while (pos < text.size() && (text[pos] == L' ' || text[pos] == L'\t' ||
+                                 text[pos] == L'\r' || text[pos] == L'\n')) {
+        ++pos;
+    }
+    return pos;
+}
+
+bool IsQualifiedSeparator(const std::wstring& text, size_t pos) {
+    return pos + 1 < text.size() && text[pos] == L':' && text[pos + 1] == L':';
+}
+
+bool IsFunctionSyntaxCandidate(const std::wstring& sourceText,
+                               const std::vector<LexedIdentifier>& identifiers,
+                               size_t index,
+                               const std::unordered_set<std::wstring>& keywords) {
+    const auto& identifier = identifiers[index];
+    if (identifier.text.empty() || keywords.find(identifier.text) != keywords.end()) {
+        return false;
+    }
+    const size_t after = SkipWhitespace(sourceText, identifier.end);
+    if (after >= sourceText.size() || sourceText[after] != L'(') return false;
+    return true;
+}
+
+std::vector<SyntaxKind> ClassifyIdentifiers(
+    const std::wstring& sourceText,
+    const std::vector<LexedIdentifier>& identifiers,
+    const std::unordered_set<std::wstring>& keywords,
+    const std::unordered_set<std::wstring>& typeNames) {
+    std::vector<SyntaxKind> kinds(identifiers.size(), SyntaxKind::Identifier);
+
+    for (size_t i = 0; i < identifiers.size(); ++i) {
+        if (keywords.find(identifiers[i].text) != keywords.end()) {
+            kinds[i] = SyntaxKind::Keyword;
+        } else if (typeNames.find(identifiers[i].text) != typeNames.end()) {
+            kinds[i] = SyntaxKind::Type;
+        }
+    }
+
+    for (size_t i = 0; i + 1 < identifiers.size(); ++i) {
+        if (!identifiers[i].text.empty() &&
+            identifiers[i].text[0] >= L'0' && identifiers[i].text[0] <= L'9') {
+            continue;
+        }
+        if (identifiers[i].end + 2 != identifiers[i + 1].begin ||
+            !IsQualifiedSeparator(sourceText, identifiers[i].end)) {
+            continue;
+        }
+        size_t chainEnd = i;
+        while (chainEnd + 1 < identifiers.size() &&
+               identifiers[chainEnd].end + 2 == identifiers[chainEnd + 1].begin &&
+               IsQualifiedSeparator(sourceText, identifiers[chainEnd].end)) {
+            ++chainEnd;
+        }
+        if (kinds[chainEnd] == SyntaxKind::Type) {
+            for (size_t j = i; j < chainEnd; ++j) {
+                if (kinds[j] == SyntaxKind::Identifier) {
+                    kinds[j] = SyntaxKind::QualifiedIdentifier;
+                }
+            }
+            i = chainEnd;
+            continue;
+        }
+        for (size_t j = i; j <= chainEnd; ++j) {
+            if (kinds[j] == SyntaxKind::Identifier) {
+                kinds[j] = SyntaxKind::QualifiedIdentifier;
+            }
+        }
+        i = chainEnd;
+    }
+    for (size_t i = 0; i < identifiers.size(); ++i) {
+        const bool nameCandidate = kinds[i] == SyntaxKind::Identifier ||
+            kinds[i] == SyntaxKind::QualifiedIdentifier;
+        if (nameCandidate &&
+            IsFunctionSyntaxCandidate(sourceText, identifiers, i, keywords)) {
+            kinds[i] = SyntaxKind::Function;
+        }
+    }
+    return kinds;
+}
+
+}  // namespace
+
 std::vector<SyntaxSpan> BuildSyntaxSpans(const std::wstring& sourceText) {
     std::vector<SyntaxSpan> spans;
     if (sourceText.empty()) return spans;
@@ -12,7 +137,8 @@ std::vector<SyntaxSpan> BuildSyntaxSpans(const std::wstring& sourceText) {
         L"if", L"else", L"for", L"while", L"do", L"switch", L"case", L"default",
         L"break", L"continue", L"return", L"true", L"false", L"NULL", L"nullptr",
         L"typedef", L"enum", L"template", L"typename", L"namespace", L"using",
-        L"new", L"delete", L"this", L"friend", L"operator", L"sizeof", L"typeid"
+        L"new", L"delete", L"this", L"friend", L"operator", L"sizeof", L"typeid",
+        L"__cdecl", L"__stdcall", L"__fastcall", L"__vectorcall", L"__thiscall"
     };
 
     static const std::unordered_set<std::wstring> basicTypes = {
@@ -47,12 +173,8 @@ std::vector<SyntaxSpan> BuildSyntaxSpans(const std::wstring& sourceText) {
         for (const auto& enm : g_moduleInfo.enums) addType(enm.name);
     }
 
-    const auto isIdentStart = [](WCHAR c) {
-        return (c >= L'a' && c <= L'z') || (c >= L'A' && c <= L'Z') || c == L'_';
-    };
-    const auto isIdentChar = [&isIdentStart](WCHAR c) {
-        return isIdentStart(c) || (c >= L'0' && c <= L'9');
-    };
+    const auto isIdentStart = IsIdentStart;
+    const auto isIdentChar = IsIdentChar;
 
     size_t pos = 0;
     while (pos < sourceText.size()) {
@@ -122,31 +244,33 @@ std::vector<SyntaxSpan> BuildSyntaxSpans(const std::wstring& sourceText) {
             continue;
         }
 
-        if (isIdentStart(sourceText[pos])) {
-            size_t end = pos;
-            while (end < sourceText.size() && isIdentChar(sourceText[end])) ++end;
-            const std::wstring word = sourceText.substr(pos, end - pos);
-            SyntaxKind kind = SyntaxKind::Identifier;
-            if (keywords.find(word) != keywords.end()) kind = SyntaxKind::Keyword;
-            else if (typeNames.find(word) != typeNames.end()) kind = SyntaxKind::Type;
-
-            if (kind != SyntaxKind::Identifier && end < sourceText.size() && sourceText[end] == L'<') {
-                size_t templateEnd = end + 1;
-                int depth = 1;
-                while (templateEnd < sourceText.size() && depth > 0) {
-                    if (sourceText[templateEnd] == L'<') ++depth;
-                    else if (sourceText[templateEnd] == L'>') --depth;
-                    ++templateEnd;
-                }
-                if (depth == 0) end = templateEnd;
-            }
-
-            if (kind != SyntaxKind::Identifier) spans.push_back({pos, end, kind});
-            pos = end;
-            continue;
-        }
         ++pos;
     }
+
+    const std::vector<LexedIdentifier> identifiers = LexIdentifiers(sourceText, spans);
+    const std::vector<SyntaxKind> kinds = ClassifyIdentifiers(
+        sourceText, identifiers, keywords, typeNames);
+    for (size_t i = 0; i < identifiers.size(); ++i) {
+        if (kinds[i] == SyntaxKind::Identifier) continue;
+        size_t end = identifiers[i].end;
+        if ((kinds[i] == SyntaxKind::Type || kinds[i] == SyntaxKind::Keyword) &&
+            end < sourceText.size() && sourceText[end] == L'<') {
+            size_t templateEnd = end + 1;
+            int depth = 1;
+            while (templateEnd < sourceText.size() && depth > 0) {
+                if (sourceText[templateEnd] == L'<') ++depth;
+                else if (sourceText[templateEnd] == L'>') --depth;
+                ++templateEnd;
+            }
+            if (depth == 0) end = templateEnd;
+        }
+        spans.push_back({identifiers[i].begin, end, kinds[i]});
+    }
+    std::sort(spans.begin(), spans.end(),
+              [](const SyntaxSpan& lhs, const SyntaxSpan& rhs) {
+                  if (lhs.begin != rhs.begin) return lhs.begin < rhs.begin;
+                  return lhs.end < rhs.end;
+              });
     return spans;
 }
 
@@ -170,6 +294,17 @@ static std::wstring ReadRichEditText(HWND hRichEdit) {
     return text;
 }
 
+void SetRichEditRangeColor(HWND hRichEdit, LONG start, LONG end, COLORREF color) {
+    CHARFORMAT2 cf{};
+    cf.cbSize = sizeof(cf);
+    cf.dwMask = CFM_COLOR;
+    cf.crTextColor = color;
+    CHARRANGE range{start, end};
+    SendMessageW(hRichEdit, EM_EXSETSEL, 0, reinterpret_cast<LPARAM>(&range));
+    SendMessageW(hRichEdit, EM_SETCHARFORMAT, SCF_SELECTION,
+                 reinterpret_cast<LPARAM>(&cf));
+}
+
 void ApplySyntaxHighlighting(HWND hRichEdit, const std::wstring& text,
                              const std::vector<SyntaxSpan>& spans) {
     if (!hRichEdit || text.empty()) return;
@@ -184,6 +319,8 @@ void ApplySyntaxHighlighting(HWND hRichEdit, const std::wstring& text,
     const COLORREF COLOR_COMMENT = RGB(0, 128, 0);
     const COLORREF COLOR_STRING = RGB(163, 21, 21);
     const COLORREF COLOR_TYPE = RGB(43, 145, 175);
+    const COLORREF COLOR_FUNCTION = RGB(121, 94, 38);
+    const COLORREF COLOR_QUALIFIED = RGB(38, 127, 153);
     const COLORREF COLOR_DEFAULT = RGB(0, 0, 0);
     CHARRANGE previousSelection{};
     SendMessageW(hRichEdit, EM_EXGETSEL, 0,
@@ -203,6 +340,8 @@ void ApplySyntaxHighlighting(HWND hRichEdit, const std::wstring& text,
         switch (span.kind) {
         case SyntaxKind::Keyword: color = COLOR_KEYWORD; break;
         case SyntaxKind::Type: color = COLOR_TYPE; break;
+        case SyntaxKind::Function: color = COLOR_FUNCTION; break;
+        case SyntaxKind::QualifiedIdentifier: color = COLOR_QUALIFIED; break;
         case SyntaxKind::Comment: color = COLOR_COMMENT; break;
         case SyntaxKind::Literal: color = COLOR_STRING; break;
         default: break;

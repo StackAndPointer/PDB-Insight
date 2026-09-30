@@ -1,5 +1,7 @@
-#include "PDBExporter.h"
+﻿#include "PDBExporter.h"
 #include "PDBParser.h"
+#include "PDBHeaderGenerator.h"
+#include "LanguageManager.h"
 #include <fstream>
 #include <sstream>
 #include <iomanip>
@@ -140,7 +142,9 @@ bool PDBExporter::ExportClassesToCSV(const std::vector<ClassInfo>& classes, cons
 
     bool isChinese = (language == L"zh-CN");
 
-    file << (isChinese ? L"Class Name,Member Name,Member Type,Offset,Access,Bit Position,Bit Size\n" : L"Class Name,Member Name,Member Type,Offset,Access,Bit Position,Bit Size\n");
+    file << (isChinese
+        ? L"Class Name,Member Name,Member Type,Offset,Access,Bit Position,Bit Size,Is Static\n"
+        : L"Class Name,Member Name,Member Type,Offset,Access,Bit Position,Bit Size,Is Static\n");
     for (const auto& cls : classes) {
         if (expandBaseClasses && !cls.baseClasses.empty() && moduleInfo) {
             for (const auto& base : cls.baseClasses) {
@@ -150,10 +154,11 @@ bool PDBExporter::ExportClassesToCSV(const std::vector<ClassInfo>& classes, cons
                         file << EscapeCSV(cls.name) << L","
                              << EscapeCSV(baseClass->name + L"::" + member.name) << L","
                              << EscapeCSV(member.type) << L","
-                             << (member.offset + base.offset) << L","
+                             << PDBHeaderGenerator::ResolveOffset(member.offset, base.inheritanceType == PDB_INHERITANCE_VIRTUAL ? -1 : base.offset) << L","
                              << EscapeCSV(PDBParser::AccessTypeToString(member.access)) << L","
                              << member.bitPosition << L","
-                             << member.bitSize << L"\n";
+                             << member.bitSize << L","
+                             << (member.isStatic ? L"true" : L"false") << L"\n";
                     }
                 }
             }
@@ -165,7 +170,8 @@ bool PDBExporter::ExportClassesToCSV(const std::vector<ClassInfo>& classes, cons
                  << member.offset << L","
                  << EscapeCSV(PDBParser::AccessTypeToString(member.access)) << L","
                  << member.bitPosition << L","
-                 << member.bitSize << L"\n";
+                 << member.bitSize << L","
+                 << (member.isStatic ? L"true" : L"false") << L"\n";
         }
     }
 
@@ -249,7 +255,8 @@ bool PDBExporter::ExportToXML(const ModuleInfo& moduleInfo, const std::wstring& 
             std::wstring inheritanceType = (base.inheritanceType == PDB_INHERITANCE_VIRTUAL) ? L"virtual" : L"normal";
             file << L"          <BaseClass name=\"" << EscapeXML(base.name)
                  << L"\" inheritanceType=\"" << inheritanceType
-                 << L"\" offset=\"" << base.offset
+                 << L"\" offset=\"" << (base.inheritanceType == PDB_INHERITANCE_VIRTUAL
+                     ? -1 : PDBHeaderGenerator::ResolveOffset(base.offset))
                  << L"\" access=\"" << EscapeXML(PDBParser::AccessTypeToString(base.access))
                  << L"\" comment=\"\"/>\n";
         }
@@ -263,10 +270,11 @@ bool PDBExporter::ExportToXML(const ModuleInfo& moduleInfo, const std::wstring& 
                     for (const auto& member : baseClass->members) {
                         file << L"          <Member name=\"" << EscapeXML(baseClass->name + L"::" + member.name)
                              << L"\" type=\"" << EscapeXML(member.type)
-                             << L"\" offset=\"" << (member.offset + base.offset)
+                             << L"\" offset=\"" << PDBHeaderGenerator::ResolveOffset(member.offset, base.inheritanceType == PDB_INHERITANCE_VIRTUAL ? -1 : base.offset)
                              << L"\" access=\"" << EscapeXML(PDBParser::AccessTypeToString(member.access))
                              << L"\" bitPosition=\"" << member.bitPosition
                              << L"\" bitSize=\"" << member.bitSize
+                             << L"\" isStatic=\"" << (member.isStatic ? L"true" : L"false")
                              << L"\" isBaseClass=\"true\""
                              << L"\" comment=\"\"/>\n";
                     }
@@ -280,6 +288,7 @@ bool PDBExporter::ExportToXML(const ModuleInfo& moduleInfo, const std::wstring& 
                  << L"\" access=\"" << EscapeXML(PDBParser::AccessTypeToString(member.access))
                  << L"\" bitPosition=\"" << member.bitPosition
                  << L"\" bitSize=\"" << member.bitSize
+                 << L"\" isStatic=\"" << (member.isStatic ? L"true" : L"false")
                  << L"\" comment=\"\"/>\n";
         }
         file << L"        </Members>\n";
@@ -334,8 +343,9 @@ bool PDBExporter::ExportToXML(const ModuleInfo& moduleInfo, const std::wstring& 
                     for (const auto& member : baseClass->members) {
                         file << L"          <Member name=\"" << EscapeXML(baseClass->name + L"::" + member.name)
                              << L"\" type=\"" << EscapeXML(member.type)
-                             << L"\" offset=\"" << (member.offset + base.offset)
+                             << L"\" offset=\"" << PDBHeaderGenerator::ResolveOffset(member.offset, base.inheritanceType == PDB_INHERITANCE_VIRTUAL ? -1 : base.offset)
                              << L"\" access=\"" << EscapeXML(PDBParser::AccessTypeToString(member.access))
+                             << L"\" isStatic=\"" << (member.isStatic ? L"true" : L"false")
                              << L"\" comment=\"\"/>\n";
                     }
                 }
@@ -346,6 +356,7 @@ bool PDBExporter::ExportToXML(const ModuleInfo& moduleInfo, const std::wstring& 
                  << L"\" type=\"" << EscapeXML(member.type)
                  << L"\" offset=\"" << member.offset
                  << L"\" access=\"" << EscapeXML(PDBParser::AccessTypeToString(member.access))
+                 << L"\" isStatic=\"" << (member.isStatic ? L"true" : L"false")
                  << L"\" comment=\"\"/>\n";
         }
         file << L"        </Members>\n";

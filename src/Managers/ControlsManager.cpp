@@ -226,6 +226,29 @@ LONG RichEditCharFromPoint(HWND hWnd, LPARAM lParam) {
 }
 
 LRESULT CALLBACK RichEditProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
+    if (message == WM_KEYDOWN && GetKeyState(VK_CONTROL) < 0) {
+        if (wParam == 'C') {
+            SendMessageW(hWnd, WM_COPY, 0, 0);
+            return 0;
+        }
+        if (wParam == 'F') {
+            CHARRANGE selection{};
+            SendMessageW(hWnd, EM_EXGETSEL, 0, reinterpret_cast<LPARAM>(&selection));
+            if (selection.cpMin != selection.cpMax) {
+                const int length = GetWindowTextLengthW(hWnd);
+                std::wstring text(static_cast<size_t>(length) + 1, L'\0');
+                GetWindowTextW(hWnd, &text[0], length + 1);
+                text.resize(static_cast<size_t>(length));
+                std::wstring selected =
+                    text.substr(selection.cpMin, selection.cpMax - selection.cpMin);
+                SetWindowTextW(hEditSearch, selected.c_str());
+                SearchItems(selected);
+            } else {
+                SetFocus(hEditSearch);
+            }
+            return 0;
+        }
+    }
     if (message == WM_LBUTTONDOWN) {
         SetFocus(hWnd);
         LRESULT result = CallWindowProcW(g_pOldRichEditProc, hWnd, message, wParam, lParam);
@@ -258,28 +281,6 @@ LRESULT CALLBACK RichEditProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPa
     if (message == WM_CONTEXTMENU) {
         ShowRichEditContextMenu(GetParent(hWnd), GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
         return 0;
-    }
-    if (message == WM_KEYDOWN && GetKeyState(VK_CONTROL) < 0) {
-        if (wParam == 'C') {
-            SendMessageW(hWnd, WM_COPY, 0, 0);
-            return 0;
-        }
-        if (wParam == 'F') {
-            CHARRANGE selection{};
-            SendMessageW(hWnd, EM_EXGETSEL, 0, reinterpret_cast<LPARAM>(&selection));
-            if (selection.cpMin != selection.cpMax) {
-                int length = GetWindowTextLengthW(hWnd);
-                std::wstring text(static_cast<size_t>(length) + 1, L'\0');
-                GetWindowTextW(hWnd, &text[0], length + 1);
-                text.resize(length);
-                std::wstring selected = text.substr(selection.cpMin, selection.cpMax - selection.cpMin);
-                SetWindowTextW(hEditSearch, selected.c_str());
-                SearchItems(selected);
-            } else {
-                SetFocus(hEditSearch);
-            }
-            return 0;
-        }
     }
     return CallWindowProcW(g_pOldRichEditProc, hWnd, message, wParam, lParam);
 }

@@ -8,6 +8,7 @@
 
 class PDBHeaderGenerator {
 public:
+    static bool WriteTextFileUtf8(const std::wstring& filePath, const std::wstring& content);
     static bool GenerateClassHeader(const ClassInfo& classInfo, const std::wstring& filePath, NumberDisplayMode numberMode = NUMBER_HEX, bool expandBaseClasses = false, const ModuleInfo* moduleInfo = nullptr);
     static bool GenerateAllHeaders(const ModuleInfo& moduleInfo, const std::wstring& directoryPath, NumberDisplayMode numberMode = NUMBER_HEX, bool expandBaseClasses = false);
     static bool GenerateClassHeader(const ClassInfo& classInfo, const std::wstring& filePath, const ExportSettings& settings, NumberDisplayMode numberMode = NUMBER_HEX, bool expandBaseClasses = false, const ModuleInfo* moduleInfo = nullptr);
@@ -24,6 +25,7 @@ public:
     static std::wstring GeneratePureCStructDeclaration(const ClassInfo& classInfo, const ExportSettings& settings, NumberDisplayMode numberMode, const ModuleInfo* moduleInfo = nullptr);
     static std::wstring FormatNumber(ULONGLONG value, NumberDisplayMode mode);
     static std::wstring FormatOffset(LONG offset, NumberDisplayMode mode);
+    static std::wstring FormatOffset(LONG offset, NumberDisplayMode mode, bool reconstructed = false);
     static LONG ResolveOffset(LONG offset, LONG baseOffset = 0);
     static std::wstring FlattenName(const std::wstring& name);
     static std::wstring ProcessTypeName(const std::wstring& name, const ExportSettings& settings);
@@ -32,6 +34,7 @@ public:
     static std::wstring AccessTypeToString(AccessType access);
     static void CollectAllMembersFromOffsetZero(const ClassInfo& classInfo,
                                                 const ModuleInfo* moduleInfo,
+                                                const std::wstring& sourceBaseName,
                                                 std::vector<MemberVariableInfo>& out);
 
 private:

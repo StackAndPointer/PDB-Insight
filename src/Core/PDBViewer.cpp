@@ -1,4 +1,5 @@
 #include "framework.h"
+#include "CommandLineManager.h"
 #include "PDBViewerGlobals.h"
 #include "MainWindow.h"
 #include "DPIManager.h"
@@ -9,6 +10,10 @@
 
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPWSTR lpCmdLine, _In_ int nCmdShow) {
     DPIManager::SetProcessDPIAware();
+
+    CommandLineManager& commandLine = CommandLineManager::GetInstance();
+    if (!commandLine.ParseCommandLine(lpCmdLine)) return 2;
+    if (commandLine.ShouldRunCommandLine()) return commandLine.RunCommandLine();
 
     INITCOMMONCONTROLSEX commonControls{sizeof(INITCOMMONCONTROLSEX),
         ICC_LISTVIEW_CLASSES | ICC_TREEVIEW_CLASSES | ICC_BAR_CLASSES |
@@ -31,10 +36,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPWSTR 
                 continue;
             }
         }
-        const bool richEditFocused = GetFocus() == hRichEdit;
-        const bool richEditShortcut = richEditFocused && GetKeyState(VK_CONTROL) < 0 &&
-            message.message == WM_KEYDOWN && (message.wParam == 'C' || message.wParam == 'F');
-        if (!richEditShortcut && !TranslateAcceleratorW(message.hwnd, accelerators, &message)) {
+        if (!TranslateAcceleratorW(message.hwnd, accelerators, &message)) {
             TranslateMessage(&message);
             DispatchMessageW(&message);
         }

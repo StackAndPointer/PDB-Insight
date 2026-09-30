@@ -9,6 +9,8 @@
 enum class SyntaxKind {
     Keyword,
     Type,
+    Function,
+    QualifiedIdentifier,
     Identifier,
     Comment,
     Literal,
@@ -101,10 +103,18 @@ struct MemberVariableInfo {
     std::wstring name;
     std::wstring type;
     LONG offset = -1;
+    ULONGLONG typeSize = 0;
+    ULONGLONG typeAlignment = 0;
+    bool isStatic = false;
+    bool offsetReconstructed = false;
     AccessType access = PDB_ACCESS_UNKNOWN;
     DWORD bitPosition = 0;
     DWORD bitSize = 0;
     TypeRef typeRef;
+    std::wstring baseClassName;
+    bool fromBaseClass = false;
+    bool typeSizeKnown = false;
+    bool typeAlignmentKnown = false;
     bool isBitfield = false;
     bool isAnonymous = false;
     std::shared_ptr<ClassInfo> anonymousType;
@@ -113,7 +123,7 @@ struct MemberVariableInfo {
 struct BaseClassInfo {
     std::wstring name;
     InheritanceType inheritanceType = PDB_INHERITANCE_UNKNOWN;
-    LONG offset = 0;
+    LONG offset = -1;
     AccessType access = PDB_ACCESS_UNKNOWN;
 };
 
@@ -133,6 +143,7 @@ struct ClassInfo {
     std::wstring name;
     ULONGLONG size = 0;
     ULONGLONG alignment = 0;
+    bool alignmentKnown = false;
     std::vector<BaseClassInfo> baseClasses;
     std::vector<MemberVariableInfo> members;
     std::vector<std::wstring> memberFunctions;
