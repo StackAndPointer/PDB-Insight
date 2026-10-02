@@ -2,8 +2,9 @@
 
 #include "PDBData.h"
 #include "dia2.h"
-#include <string>
+#include <atomic>
 #include <functional>
+#include <string>
 
 class PDBParser {
 public:
@@ -26,6 +27,12 @@ public:
         m_cancellationCallback = std::move(callback);
     }
 
+    // Optional diagnostic hook used by CLI batch runs. Receives
+    // "<stage>=<milliseconds>" fragments; never invoked unless set.
+    void SetStageTimingCallback(std::function<void(const std::wstring&)> callback) {
+        m_stageTimingCallback = std::move(callback);
+    }
+
     bool WasCancelled() const { return m_cancelled; }
 
     static std::wstring AccessTypeToString(AccessType access);
@@ -35,11 +42,17 @@ public:
 private:
     bool Initialize();
     void Cleanup();
+    bool OpenSession(const std::wstring& pdbPath, IDiaDataSource** dataSource,
+                     IDiaSession** session, IDiaSymbol** globalScope,
+                     std::wstring* errorMessage) const;
     bool IsCancelled();
     bool ReportProgress(int percent, const std::wstring& message);
+    void ReportStageTiming(const wchar_t* stage, ULONGLONG milliseconds);
 
     void ParseFunctions(IDiaSymbol* pGlobal, ModuleInfo& moduleInfo);
+    void RenderFunctionSignatures(ModuleInfo& moduleInfo);
     void ParseUdtSymbols(IDiaSymbol* pGlobal, ModuleInfo& moduleInfo);
+    void ParseUdtSymbolsSingleSession(IDiaSymbol* pGlobal, ModuleInfo& moduleInfo);
     void ParseEnums(IDiaSymbol* pGlobal, ModuleInfo& moduleInfo);
     void ParseGlobalVariables(IDiaSymbol* pGlobal, ModuleInfo& moduleInfo);
     void ParseClassDetails(IDiaSymbol* pClass, ClassInfo& classInfo);
@@ -59,9 +72,11 @@ private:
     IDiaDataSource* m_pDataSource;
     IDiaSession* m_pSession;
     IDiaSymbol* m_pGlobal;
+    std::wstring m_pdbPath;
     std::wstring m_lastError;
     std::function<void(int, const std::wstring&)> m_progressCallback;
     std::function<bool()> m_cancellationCallback;
+    std::function<void(const std::wstring&)> m_stageTimingCallback;
     bool m_cancelled = false;
     bool m_comInitialized = false;
 };

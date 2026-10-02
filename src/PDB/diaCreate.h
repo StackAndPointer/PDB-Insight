@@ -7,6 +7,8 @@
 #ifndef _DIACREATE_H_
 #define _DIACREATE_H_
 
+#include <windows.h>
+
 //
 // Create a dia data source object from the dia dll (by dll name - does not access the registry).
 //

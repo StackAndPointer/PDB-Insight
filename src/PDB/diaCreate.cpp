@@ -1,6 +1,7 @@
+#include "diaCreate.h"
 #include <windows.h>
 #include <stdio.h>
-#include "diaCreate.h"
+#include <mutex>
 
 typedef HRESULT(__stdcall* pDllGetClassObject)(
     _In_  REFCLSID rclsid,
@@ -8,7 +9,10 @@ typedef HRESULT(__stdcall* pDllGetClassObject)(
     _Out_ LPVOID*   ppv
 );
 
-static wchar_t g_debugInfo[1024] = {0};
+static thread_local wchar_t g_debugInfo[1024] = {0};
+static HMODULE g_diaModule = nullptr;
+static pDllGetClassObject g_dllGetClassObject = nullptr;
+static std::mutex g_diaModuleMutex;
 
 void SetDebugInfo(const wchar_t* info)
 {
@@ -27,48 +31,42 @@ HRESULT STDMETHODCALLTYPE NoRegCoCreate(const __wchar_t* dllName,
 {
     HRESULT hr;
     wchar_t tempInfo[512];
-    
-    swprintf_s(tempInfo, 512, L"Trying to load: %s", dllName);
-    SetDebugInfo(tempInfo);
 
-    HMODULE hModule = LoadLibraryExW(dllName, nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
-    
-    if (!hModule)
-    {
-        DWORD err = GetLastError();
-        swprintf_s(tempInfo, 512, L"LoadLibraryEx failed: %s, error: %lu", dllName, err);
+    std::lock_guard<std::mutex> lock(g_diaModuleMutex);
+    if (!g_diaModule) {
+        swprintf_s(tempInfo, 512, L"Trying to load: %s", dllName);
         SetDebugInfo(tempInfo);
-        hr = HRESULT_FROM_WIN32(err);
-        return hr;
-    }
 
-    swprintf_s(tempInfo, 512, L"Successfully loaded: %s", dllName);
-    SetDebugInfo(tempInfo);
+        g_diaModule = LoadLibraryExW(dllName, nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
+        if (!g_diaModule) {
+            DWORD err = GetLastError();
+            swprintf_s(tempInfo, 512, L"LoadLibraryEx failed: %s, error: %lu", dllName, err);
+            SetDebugInfo(tempInfo);
+            return HRESULT_FROM_WIN32(err);
+        }
 
-    pDllGetClassObject DllGetClassObject;
-    DllGetClassObject = (pDllGetClassObject)GetProcAddress(hModule, "DllGetClassObject");
-    
-    if (!DllGetClassObject)
-    {
-        DWORD err = GetLastError();
-        swprintf_s(tempInfo, 512, L"GetProcAddress(DllGetClassObject) failed, error: %lu", err);
-        SetDebugInfo(tempInfo);
-        hr = HRESULT_FROM_WIN32(err);
-        FreeLibrary(hModule);
-        return hr;
+        g_dllGetClassObject = reinterpret_cast<pDllGetClassObject>(
+            GetProcAddress(g_diaModule, "DllGetClassObject"));
+        if (!g_dllGetClassObject) {
+            DWORD err = GetLastError();
+            FreeLibrary(g_diaModule);
+            g_diaModule = nullptr;
+            swprintf_s(tempInfo, 512, L"GetProcAddress(DllGetClassObject) failed, error: %lu", err);
+            SetDebugInfo(tempInfo);
+            return HRESULT_FROM_WIN32(err);
+        }
     }
 
     swprintf_s(tempInfo, 512, L"Successfully found DllGetClassObject");
     SetDebugInfo(tempInfo);
 
     IClassFactory* classFactory;
-    hr = DllGetClassObject(rclsid, IID_IClassFactory, (LPVOID*)&classFactory);
+    hr = g_dllGetClassObject(rclsid, IID_IClassFactory, (LPVOID*)&classFactory);
     
     if (FAILED(hr))
     {
         swprintf_s(tempInfo, 512, L"DllGetClassObject failed, hr: 0x%08X", hr);
         SetDebugInfo(tempInfo);
-        FreeLibrary(hModule);
         return hr;
     }
 
@@ -82,12 +80,11 @@ HRESULT STDMETHODCALLTYPE NoRegCoCreate(const __wchar_t* dllName,
         swprintf_s(tempInfo, 512, L"CreateInstance failed, hr: 0x%08X", hr);
         SetDebugInfo(tempInfo);
         classFactory->Release();
-        FreeLibrary(hModule);
         return hr;
     }
 
-    classFactory->AddRef();
-    
+    classFactory->Release();
+
     swprintf_s(tempInfo, 512, L"Successfully created DIA data source from: %s", dllName);
     SetDebugInfo(tempInfo);
     

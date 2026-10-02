@@ -3,16 +3,22 @@
 #include "diaCreate.h"
 #include "cvConst.h"
 #include <comdef.h>
+#include <atomic>
+#include <mutex>
+#include <algorithm>
 #include <sstream>
 #include <iomanip>
 #include <shlwapi.h>
+#include <thread>
 #include <unordered_set>
 
 #pragma comment(lib, "Advapi32.lib")
 #pragma comment(lib, "OleAut32.lib")
 #pragma comment(lib, "shlwapi.lib")
 
-
+namespace {
+std::mutex s_timingMutex;
+}
 
 PDBParser::PDBParser()
     : m_pDataSource(nullptr)
@@ -23,15 +29,21 @@ PDBParser::PDBParser()
 }
 
 PDBParser::~PDBParser() {
-    Cleanup();
     if (m_comInitialized) {
+        Cleanup();
         CoUninitialize();
         m_comInitialized = false;
     }
 }
 
 bool PDBParser::Initialize() {
-    HRESULT hr = CoInitialize(nullptr);
+    HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    if (hr == RPC_E_CHANGED_MODE) {
+        hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    }
+    if (hr == S_FALSE) {
+        return true;
+    }
     if (FAILED(hr)) {
         m_lastError = L"Failed to initialize COM";
         return false;
@@ -53,6 +65,7 @@ void PDBParser::Cleanup() {
         m_pDataSource->Release();
         m_pDataSource = nullptr;
     }
+    m_pdbPath.clear();
 }
 
 void PDBParser::Unload() {
@@ -72,41 +85,76 @@ bool PDBParser::ReportProgress(int percent, const std::wstring& message) {
     return !IsCancelled();
 }
 
+void PDBParser::ReportStageTiming(const wchar_t* stage, ULONGLONG milliseconds) {
+    if (!m_stageTimingCallback || !stage) return;
+    std::wstring fragment = stage;
+    fragment += L"=";
+    fragment += std::to_wstring(milliseconds);
+    m_stageTimingCallback(fragment);
+}
+
+bool PDBParser::OpenSession(const std::wstring& pdbPath, IDiaDataSource** dataSource,
+                            IDiaSession** session, IDiaSymbol** globalScope,
+                            std::wstring* errorMessage) const {
+    if (!dataSource || !session || !globalScope || !errorMessage) return false;
+
+    *dataSource = nullptr;
+    *session = nullptr;
+    *globalScope = nullptr;
+    errorMessage->clear();
+
+    HRESULT hr = NoRegCoCreate(L"msdia140.dll", _uuidof(DiaSource),
+        _uuidof(IDiaDataSource), reinterpret_cast<void**>(dataSource));
+    if (FAILED(hr)) {
+        *errorMessage = L"Failed to create DIA data source:\n";
+        *errorMessage += GetDebugInfo();
+        return false;
+    }
+
+    hr = (*dataSource)->loadDataFromPdb(pdbPath.c_str());
+    if (FAILED(hr)) {
+        *errorMessage = L"Failed to load PDB file";
+        return false;
+    }
+
+    hr = (*dataSource)->openSession(session);
+    if (FAILED(hr)) {
+        *errorMessage = L"Failed to open session";
+        return false;
+    }
+
+    hr = (*session)->get_globalScope(globalScope);
+    if (FAILED(hr)) {
+        *errorMessage = L"Failed to get global scope";
+        return false;
+    }
+
+    return true;
+}
+
 bool PDBParser::LoadPDB(const std::wstring& pdbPath) {
     Cleanup();
 
     if (IsCancelled()) return false;
-    HRESULT hr = NoRegCoCreate(L"msdia140.dll", _uuidof(DiaSource), _uuidof(IDiaDataSource), (void**)&m_pDataSource);
-    
-    if (FAILED(hr)) {
-        const wchar_t* debugInfo = GetDebugInfo();
-        std::wstring errorMsg = L"Failed to create DIA data source:\n";
-        errorMsg += debugInfo;
-        m_lastError = errorMsg;
+
+    IDiaDataSource* dataSource = nullptr;
+    IDiaSession* session = nullptr;
+    IDiaSymbol* globalScope = nullptr;
+    std::wstring errorMessage;
+    if (!OpenSession(pdbPath, &dataSource, &session, &globalScope, &errorMessage)) {
+        if (dataSource) dataSource->Release();
+        if (session) session->Release();
+        if (globalScope) globalScope->Release();
+        if (IsCancelled()) return false;
+        m_lastError = std::move(errorMessage);
         return false;
     }
 
-    hr = m_pDataSource->loadDataFromPdb(pdbPath.c_str());
-    if (IsCancelled()) return false;
-    if (FAILED(hr)) {
-        m_lastError = L"Failed to load PDB file";
-        return false;
-    }
-
-    hr = m_pDataSource->openSession(&m_pSession);
-    if (IsCancelled()) return false;
-    if (FAILED(hr)) {
-        m_lastError = L"Failed to open session";
-        return false;
-    }
-
-    hr = m_pSession->get_globalScope(&m_pGlobal);
-    if (IsCancelled()) return false;
-    if (FAILED(hr)) {
-        m_lastError = L"Failed to get global scope";
-        return false;
-    }
-
+    m_pDataSource = dataSource;
+    m_pSession = session;
+    m_pGlobal = globalScope;
+    m_pdbPath = pdbPath;
+    m_cancelled = false;
     return true;
 }
 
@@ -124,71 +172,386 @@ ModuleInfo PDBParser::ParseModule() {
         SysFreeString(bstrName);
     }
 
+    constexpr ULONGLONG kParallelParseThresholdBytes = 8ULL * 1024 * 1024;
+    ULONGLONG pdbSize = 0;
+    if (!m_pdbPath.empty()) {
+        WIN32_FILE_ATTRIBUTE_DATA fileInfo{};
+        if (GetFileAttributesExW(m_pdbPath.c_str(), GetFileExInfoStandard, &fileInfo)) {
+            pdbSize = (static_cast<ULONGLONG>(fileInfo.nFileSizeHigh) << 32) |
+                fileInfo.nFileSizeLow;
+        }
+    }
+
+    if (m_pdbPath.empty() || pdbSize < kParallelParseThresholdBytes) {
+        ULONGLONG t0 = GetTickCount64();
+        if (!ReportProgress(0, L"Parsing functions...")) return moduleInfo;
+        ParseFunctions(m_pGlobal, moduleInfo);
+        ULONGLONG t1 = GetTickCount64();
+        ReportStageTiming(L"functions", t1 - t0);
+        if (!ReportProgress(20, L"Parsing global variables...")) return moduleInfo;
+        ParseGlobalVariables(m_pGlobal, moduleInfo);
+        ULONGLONG t2 = GetTickCount64();
+        ReportStageTiming(L"globals", t2 - t1);
+        if (!ReportProgress(40, L"Parsing classes...")) return moduleInfo;
+        ParseUdtSymbols(m_pGlobal, moduleInfo);
+        ULONGLONG t3 = GetTickCount64();
+        ReportStageTiming(L"udt", t3 - t2);
+        ParseEnums(m_pGlobal, moduleInfo);
+        ReportStageTiming(L"enums", GetTickCount64() - t3);
+        RenderFunctionSignatures(moduleInfo);
+        if (!ReportProgress(100, L"Complete")) return moduleInfo;
+        return moduleInfo;
+    }
+
+    enum class ParseStage {
+        Functions,
+        GlobalVariables,
+        UdtSymbols,
+        Enums
+    };
+
+    struct StageResult {
+        ModuleInfo module;
+        std::wstring error;
+        bool cancelled = false;
+    };
+
+    const std::wstring pdbPath = m_pdbPath;
+    std::vector<StageResult> results(4);
+    std::vector<std::thread> workers;
+    workers.reserve(4);
+    std::atomic<int> completed{0};
+
     if (!ReportProgress(0, L"Parsing functions...")) return moduleInfo;
-    ParseFunctions(m_pGlobal, moduleInfo);
 
-    if (!ReportProgress(20, L"Parsing global variables...")) return moduleInfo;
-    ParseGlobalVariables(m_pGlobal, moduleInfo);
+    // Start every stage at once. The light stages finish well before UDT, and
+    // overlapping them with UDT hides their cost; serialising the two parallel
+    // pools measured slower because DIA access is internally serialised anyway.
+    for (size_t index = 0; index < 4; ++index) {
+        workers.emplace_back([this, index, &pdbPath, &results, &completed]() {
+            HRESULT comResult = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+            const bool comInitialized = SUCCEEDED(comResult);
+            if (FAILED(comResult) && comResult != RPC_E_CHANGED_MODE) {
+                results[index].error = L"Failed to initialize COM in parser worker";
+                completed.fetch_add(1, std::memory_order_relaxed);
+                return;
+            }
 
-    if (!ReportProgress(40, L"Parsing classes...")) return moduleInfo;
+            ParseStage stage = static_cast<ParseStage>(index);
+            StageResult& result = results[index];
 
-    ParseUdtSymbols(m_pGlobal, moduleInfo);
-    ParseEnums(m_pGlobal, moduleInfo);
+            IDiaDataSource* dataSource = nullptr;
+            IDiaSession* session = nullptr;
+            IDiaSymbol* globalScope = nullptr;
+            if (!OpenSession(pdbPath, &dataSource, &session, &globalScope, &result.error)) {
+                if (dataSource) dataSource->Release();
+                if (session) session->Release();
+                if (globalScope) globalScope->Release();
+                if (comInitialized) CoUninitialize();
+                completed.fetch_add(1, std::memory_order_relaxed);
+                return;
+            }
+
+            const ULONGLONG stageStart = GetTickCount64();
+            ULONGLONG functionDiaStart = 0;
+            switch (stage) {
+                case ParseStage::Functions:
+                    functionDiaStart = GetTickCount64();
+                    ParseFunctions(globalScope, result.module);
+                    if (m_stageTimingCallback) {
+                        std::lock_guard<std::mutex> lock(s_timingMutex);
+                        m_stageTimingCallback(L"functions-dia=" +
+                            std::to_wstring(GetTickCount64() - functionDiaStart) +
+                            L"ms/" + std::to_wstring(result.module.functions.size()) +
+                            L"fns");
+                    }
+                    break;
+                case ParseStage::GlobalVariables:
+                    ParseGlobalVariables(globalScope, result.module);
+                    break;
+                case ParseStage::UdtSymbols:
+                    ParseUdtSymbols(globalScope, result.module);
+                    break;
+                case ParseStage::Enums:
+                    ParseEnums(globalScope, result.module);
+                    break;
+            }
+            const wchar_t* stageName =
+                stage == ParseStage::Functions ? L"functions" :
+                stage == ParseStage::GlobalVariables ? L"globals" :
+                stage == ParseStage::UdtSymbols ? L"udt" : L"enums";
+            {
+                std::lock_guard<std::mutex> lock(s_timingMutex);
+                ReportStageTiming(stageName, GetTickCount64() - stageStart);
+            }
+
+            result.cancelled = IsCancelled();
+            globalScope->Release();
+            session->Release();
+            dataSource->Release();
+            completed.fetch_add(1, std::memory_order_relaxed);
+            if (comInitialized) CoUninitialize();
+        });
+    }
+
+    constexpr UINT_PTR kProgressTimerId = 0x50444249;
+    const HWND progressOwner = GetForegroundWindow();
+    const bool useTimer = progressOwner && IsWindow(progressOwner);
+    if (useTimer) SetTimer(progressOwner, kProgressTimerId, 150, nullptr);
+
+    const int totalStages = static_cast<int>(workers.size());
+    while (completed.load(std::memory_order_relaxed) < totalStages) {
+        const int now = completed.load(std::memory_order_relaxed);
+        const int percent = (std::min)(99, (now * 100) / totalStages);
+        const wchar_t* message = L"Parsing functions...";
+        if (now == 1) message = L"Parsing global variables...";
+        else if (now == 2) message = L"Parsing classes...";
+        else if (now >= 3) message = L"Finalizing...";
+        if (!ReportProgress(percent, message)) break;
+        MsgWaitForMultipleObjectsEx(0, nullptr, 5, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+        if (IsCancelled()) break;
+    }
+
+    for (auto& worker : workers) {
+        if (worker.joinable()) worker.join();
+    }
+
+    if (useTimer) KillTimer(progressOwner, kProgressTimerId);
+
+    if (IsCancelled()) return ModuleInfo();
+
+    for (const auto& result : results) {
+        if (result.cancelled) {
+            m_cancelled = true;
+            return ModuleInfo();
+        }
+    }
+
+    for (const auto& result : results) {
+        if (!result.error.empty()) {
+            m_lastError = result.error;
+            return ModuleInfo();
+        }
+    }
+
+    moduleInfo.functions = std::move(results[0].module.functions);
+    moduleInfo.globalVariables = std::move(results[1].module.globalVariables);
+    moduleInfo.classes = std::move(results[2].module.classes);
+    moduleInfo.structs = std::move(results[2].module.structs);
+    moduleInfo.unions = std::move(results[2].module.unions);
+    moduleInfo.enums = std::move(results[3].module.enums);
+
+    RenderFunctionSignatures(moduleInfo);
 
     if (!ReportProgress(100, L"Complete")) return moduleInfo;
     return moduleInfo;
 }
 
+void PDBParser::RenderFunctionSignatures(ModuleInfo& moduleInfo) {
+    std::vector<FunctionInfo>& functions = moduleInfo.functions;
+    if (functions.empty()) return;
+
+    unsigned int threads = std::thread::hardware_concurrency();
+    if (threads == 0) threads = 4;
+    threads = (std::min)(threads, static_cast<unsigned int>(8));
+    if (functions.size() < 256) threads = 1;
+
+    std::atomic<size_t> next{0};
+    std::vector<std::thread> workers;
+    workers.reserve(threads);
+    for (unsigned int slot = 0; slot < threads; ++slot) {
+        workers.emplace_back([this, &functions, &next]() {
+            while (!IsCancelled()) {
+                const size_t index = next.fetch_add(1, std::memory_order_relaxed);
+                if (index >= functions.size()) break;
+                functions[index].displaySignature =
+                    GenerateFunctionSignature(functions[index]);
+            }
+        });
+    }
+    for (auto& thread : workers) {
+        if (thread.joinable()) thread.join();
+    }
+}
+
 void PDBParser::ParseFunctions(IDiaSymbol* pGlobal, ModuleInfo& moduleInfo) {
-    IDiaEnumSymbols* pEnumSymbols = nullptr;
-    HRESULT hr = pGlobal->findChildren(SymTagFunction, nullptr, nsNone, &pEnumSymbols);
-    if (FAILED(hr) || !pEnumSymbols) {
-        return;
-    }
-
-    IDiaSymbol* pSymbol = nullptr;
-    std::unordered_set<ULONGLONG> knownFunctionRvas;
-    ULONG celt = 0;
-    while (!IsCancelled() && SUCCEEDED(pEnumSymbols->Next(1, &pSymbol, &celt)) && celt == 1) {
-        FunctionInfo funcInfo;
-        ParseFunctionDetails(pSymbol, funcInfo);
-        funcInfo.displaySignature = GenerateFunctionSignature(funcInfo);
-        
-        if (!funcInfo.name.empty() || !funcInfo.undecoratedName.empty()) {
-            moduleInfo.functions.push_back(funcInfo);
-            if (funcInfo.rva != 0) knownFunctionRvas.insert(funcInfo.rva);
+    // Symbol-level parallelism: functions are independent, so shard the global
+    // function enumeration across worker sessions. Each worker collects its own
+    // slice of FunctionInfo; a final merge replays the shards in ordinal order
+    // to preserve the serial enumeration ordering.
+    ULONG functionCount = 0;
+    {
+        IDiaEnumSymbols* pEnum = nullptr;
+        if (FAILED(pGlobal->findChildren(SymTagFunction, nullptr, nsNone, &pEnum)) || !pEnum) {
+            return;
         }
-        
-        pSymbol->Release();
+        LONG count = 0;
+        if (SUCCEEDED(pEnum->get_Count(&count)) && count > 0) {
+            functionCount = static_cast<ULONG>(count);
+        }
+        pEnum->Release();
     }
 
-    pEnumSymbols->Release();
-    
+    unsigned int workerCount = std::thread::hardware_concurrency();
+    if (workerCount == 0) workerCount = 4;
+    workerCount = (std::min)(workerCount, static_cast<unsigned int>(6));
+    if (functionCount < 512) workerCount = 1;
+    if (functionCount == 0) workerCount = 1;
+    const ULONG functionChunkSize =
+        (functionCount + workerCount - 1) / workerCount;
+
+    std::vector<std::vector<FunctionInfo>> perWorkerFunctions(workerCount);
+    std::vector<ULONGLONG> perWorkerMs(workerCount, 0);
+    std::vector<bool> workerFailed(workerCount, false);
+    std::vector<std::thread> workers;
+    workers.reserve(workerCount);
+
+    if (workerCount > 1) {
+        for (unsigned int worker = 0; worker < workerCount; ++worker) {
+            workers.emplace_back([this, &perWorkerFunctions, &perWorkerMs, &workerFailed,
+                                  worker, workerCount, functionChunkSize, functionCount]() {
+                HRESULT comResult = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+                const bool comInitialized = SUCCEEDED(comResult);
+                if (FAILED(comResult) && comResult != RPC_E_CHANGED_MODE) {
+                    workerFailed[worker] = true;
+                    return;
+                }
+
+                IDiaDataSource* dataSource = nullptr;
+                IDiaSession* session = nullptr;
+                IDiaSymbol* globalScope = nullptr;
+                std::wstring errorMessage;
+                if (!OpenSession(m_pdbPath, &dataSource, &session, &globalScope, &errorMessage)) {
+                    workerFailed[worker] = true;
+                    if (dataSource) dataSource->Release();
+                    if (session) session->Release();
+                    if (globalScope) globalScope->Release();
+                    if (comInitialized) CoUninitialize();
+                    return;
+                }
+
+                IDiaEnumSymbols* pEnumSymbols = nullptr;
+                if (SUCCEEDED(globalScope->findChildren(SymTagFunction, nullptr, nsNone,
+                                                        &pEnumSymbols)) && pEnumSymbols) {
+                    const ULONGLONG start = GetTickCount64();
+                    std::vector<FunctionInfo>& local = perWorkerFunctions[worker];
+                    const ULONG begin = worker * functionChunkSize;
+                    const ULONG finish = (std::min)(begin + functionChunkSize, functionCount);
+                    local.reserve(finish > begin ? finish - begin : 0);
+                    if (begin > 0) pEnumSymbols->Skip(begin);
+                    IDiaSymbol* pSymbol = nullptr;
+                    ULONG fetched = 0;
+                    ULONG ordinal = 0;
+                    while (!IsCancelled() &&
+                           SUCCEEDED(pEnumSymbols->Next(1, &pSymbol, &fetched)) && fetched == 1) {
+                        FunctionInfo funcInfo;
+                        ParseFunctionDetails(pSymbol, funcInfo);
+                        if (!funcInfo.name.empty() || !funcInfo.undecoratedName.empty()) {
+                            local.push_back(std::move(funcInfo));
+                        }
+                        pSymbol->Release();
+                        if (++ordinal >= functionChunkSize) break;
+                    }
+                    pEnumSymbols->Release();
+                    perWorkerMs[worker] = GetTickCount64() - start;
+                } else {
+                    workerFailed[worker] = true;
+                }
+
+                globalScope->Release();
+                session->Release();
+                dataSource->Release();
+                if (comInitialized) CoUninitialize();
+            });
+        }
+
+        for (auto& worker : workers) {
+            if (worker.joinable()) worker.join();
+        }
+    }
+
+    bool allWorkersFailed = workerCount > 1;
+    for (unsigned int worker = 0; worker < workerCount; ++worker) {
+        if (!workerFailed[worker]) { allWorkersFailed = false; break; }
+    }
+
+    if (workerCount == 1 || allWorkersFailed) {
+        // Serial fallback on the caller's session.
+        IDiaEnumSymbols* pEnumSymbols = nullptr;
+        if (SUCCEEDED(pGlobal->findChildren(SymTagFunction, nullptr, nsNone, &pEnumSymbols)) &&
+            pEnumSymbols) {
+            IDiaSymbol* pSymbol = nullptr;
+            ULONG fetched = 0;
+            while (!IsCancelled() &&
+                   SUCCEEDED(pEnumSymbols->Next(1, &pSymbol, &fetched)) && fetched == 1) {
+                FunctionInfo funcInfo;
+                ParseFunctionDetails(pSymbol, funcInfo);
+                if (!funcInfo.name.empty() || !funcInfo.undecoratedName.empty()) {
+                    moduleInfo.functions.push_back(std::move(funcInfo));
+                }
+                pSymbol->Release();
+            }
+            pEnumSymbols->Release();
+        }
+    } else {
+        std::vector<size_t> cursor(workerCount, 0);
+        size_t remaining = 0;
+        for (unsigned int worker = 0; worker < workerCount; ++worker) {
+            remaining += perWorkerFunctions[worker].size();
+        }
+        while (remaining > 0) {
+            for (unsigned int worker = 0; worker < workerCount; ++worker) {
+                auto& local = perWorkerFunctions[worker];
+                if (cursor[worker] >= local.size()) continue;
+                moduleInfo.functions.push_back(std::move(local[cursor[worker]++]));
+                --remaining;
+            }
+        }
+    }
+
+    if (m_stageTimingCallback) {
+        std::wstring detail = L"functions-workers=" + std::to_wstring(workerCount);
+        for (unsigned int worker = 0; worker < workerCount; ++worker) {
+            detail += L" w" + std::to_wstring(worker) + L":" +
+                std::to_wstring(perWorkerFunctions[worker].size()) + L"/" +
+                std::to_wstring(perWorkerMs[worker]) + L"ms";
+        }
+        std::lock_guard<std::mutex> lock(s_timingMutex);
+        m_stageTimingCallback(detail);
+    }
+
+    // Public symbols supplement the function list. Keep this on the caller's
+    // session; it is a cheap pass and must observe the RVAs already collected.
     IDiaEnumSymbols* pEnumPublic = nullptr;
-    hr = pGlobal->findChildren(SymTagPublicSymbol, nullptr, nsNone, &pEnumPublic);
+    std::unordered_set<ULONGLONG> knownFunctionRvas;
+    for (const auto& function : moduleInfo.functions) {
+        if (function.rva != 0) knownFunctionRvas.insert(function.rva);
+    }
+    HRESULT hr = pGlobal->findChildren(SymTagPublicSymbol, nullptr, nsNone, &pEnumPublic);
     if (SUCCEEDED(hr) && pEnumPublic) {
         IDiaSymbol* pPublicSymbol = nullptr;
+        ULONG celt = 0;
         while (!IsCancelled() && SUCCEEDED(pEnumPublic->Next(1, &pPublicSymbol, &celt)) && celt == 1) {
             BOOL isFunction = FALSE;
             if (SUCCEEDED(pPublicSymbol->get_function(&isFunction)) && isFunction) {
                 FunctionInfo funcInfo;
                 funcInfo.name = GetSymbolName(pPublicSymbol);
-                
+
                 BSTR bstrUndecorated = nullptr;
                 if (SUCCEEDED(pPublicSymbol->get_undecoratedName(&bstrUndecorated)) && bstrUndecorated) {
                     funcInfo.undecoratedName = bstrUndecorated;
                     SysFreeString(bstrUndecorated);
                 }
-                
+
                 pPublicSymbol->get_relativeVirtualAddress(&funcInfo.rva);
                 pPublicSymbol->get_virtualAddress(&funcInfo.virtualAddress);
                 pPublicSymbol->get_length(&funcInfo.size);
-                funcInfo.displaySignature = GenerateFunctionSignature(funcInfo);
-                
+
                 if (!funcInfo.name.empty() || !funcInfo.undecoratedName.empty()) {
-                    const bool duplicate = funcInfo.rva != 0 && !knownFunctionRvas.insert(funcInfo.rva).second;
+                    const bool duplicate = funcInfo.rva != 0 &&
+                        !knownFunctionRvas.insert(funcInfo.rva).second;
                     if (!duplicate) {
-                        moduleInfo.functions.push_back(funcInfo);
+                        moduleInfo.functions.push_back(std::move(funcInfo));
                     }
                 }
             }
@@ -199,6 +562,187 @@ void PDBParser::ParseFunctions(IDiaSymbol* pGlobal, ModuleInfo& moduleInfo) {
 }
 
 void PDBParser::ParseUdtSymbols(IDiaSymbol* pGlobal, ModuleInfo& moduleInfo) {
+    // UDT parsing is the long pole: each type needs members, bases, member
+    // functions and virtual functions. Enumerate the global UDT list once to
+    // learn the count, then have every worker open its own DIA session and walk
+    // its own findChildren enumeration, taking every workerCount-th symbol.
+    // IDiaSymbol objects stay inside the session that produced them, and each
+    // symbol keeps a global ordinal so the merged order matches a serial walk.
+    const ULONGLONG discoverStart = GetTickCount64();
+    ULONG udtCount = 0;
+    {
+        IDiaEnumSymbols* enumSymbols = nullptr;
+        HRESULT hr = pGlobal->findChildren(SymTagUDT, nullptr, nsNone, &enumSymbols);
+        if (FAILED(hr) || !enumSymbols) return;
+        LONG count = 0;
+        if (SUCCEEDED(enumSymbols->get_Count(&count)) && count > 0) {
+            udtCount = static_cast<ULONG>(count);
+        }
+        enumSymbols->Release();
+    }
+
+    if (udtCount == 0) return;
+
+    if (m_stageTimingCallback) {
+        m_stageTimingCallback(L"udt-discover=" +
+            std::to_wstring(GetTickCount64() - discoverStart) + L"ms/" +
+            std::to_wstring(udtCount) + L"symbols");
+    }
+
+    struct TaggedClass {
+        size_t order = 0;
+        ClassInfo info;
+    };
+
+    unsigned int systemThreads = std::thread::hardware_concurrency();
+    unsigned int requested = systemThreads > 0 ? systemThreads : 8;
+    unsigned int workerCount = (std::min)(requested, static_cast<unsigned int>(6));
+    if (workerCount < 1) workerCount = 1;
+    if (udtCount < 64) workerCount = 1;
+    else if (udtCount < 512) workerCount = (std::min)(workerCount, 2u);
+
+    struct TaggedClassSpan {
+        size_t order = 0;
+        std::vector<TaggedClass> items;
+    };
+    std::vector<TaggedClassSpan> perWorkerResults(workerCount);
+    std::vector<std::atomic<size_t>> perWorkerCount(workerCount);
+    for (auto& counter : perWorkerCount) counter.store(0);
+    std::vector<ULONGLONG> perWorkerMs(workerCount, 0);
+    std::vector<bool> workerFailed(workerCount, false);
+    std::vector<std::thread> workers;
+    workers.reserve(workerCount);
+
+    for (unsigned int worker = 0; worker < workerCount; ++worker) {
+        workers.emplace_back([this, &udtCount, &perWorkerResults, &perWorkerCount,
+                              &perWorkerMs, &workerFailed, worker, workerCount]() {
+            HRESULT comResult = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+            const bool comInitialized = SUCCEEDED(comResult);
+            if (FAILED(comResult) && comResult != RPC_E_CHANGED_MODE) {
+                workerFailed[worker] = true;
+                return;
+            }
+
+            IDiaDataSource* dataSource = nullptr;
+            IDiaSession* session = nullptr;
+            IDiaSymbol* globalScope = nullptr;
+            std::wstring errorMessage;
+            if (!OpenSession(m_pdbPath, &dataSource, &session, &globalScope, &errorMessage)) {
+                workerFailed[worker] = true;
+                if (dataSource) dataSource->Release();
+                if (session) session->Release();
+                if (globalScope) globalScope->Release();
+                if (comInitialized) CoUninitialize();
+                return;
+            }
+
+            IDiaEnumSymbols* enumSymbols = nullptr;
+            if (FAILED(globalScope->findChildren(SymTagUDT, nullptr, nsNone, &enumSymbols)) ||
+                !enumSymbols) {
+                workerFailed[worker] = true;
+                globalScope->Release();
+                session->Release();
+                dataSource->Release();
+                if (comInitialized) CoUninitialize();
+                return;
+            }
+
+            const ULONGLONG workerStart = GetTickCount64();
+            TaggedClassSpan& span = perWorkerResults[worker];
+            span.order = worker;
+            std::vector<TaggedClass>& local = span.items;
+            local.reserve(udtCount / workerCount + 1);
+            size_t worked = 0;
+            size_t ordinal = 0;
+            IDiaSymbol* symbol = nullptr;
+            ULONG fetched = 0;
+            while (!IsCancelled()) {
+                const HRESULT nextResult = enumSymbols->Next(1, &symbol, &fetched);
+                if (FAILED(nextResult) || fetched != 1 || !symbol) break;
+                const size_t globalOrdinal = ordinal++;
+                if (globalOrdinal % workerCount != worker) {
+                    symbol->Release();
+                    continue;
+                }
+                DWORD udtKind = 0;
+                symbol->get_udtKind(&udtKind);
+                if (udtKind == UdtClass || udtKind == UdtStruct || udtKind == UdtUnion) {
+                    ClassInfo classInfo{};
+                    classInfo.isStruct = udtKind == UdtStruct;
+                    classInfo.isUnion = udtKind == UdtUnion;
+                    ParseClassDetails(symbol, classInfo);
+                    if (!IsAnonymousTypeName(classInfo.name)) {
+                        TaggedClass tagged;
+                        tagged.order = globalOrdinal;
+                        tagged.info = std::move(classInfo);
+                        local.push_back(std::move(tagged));
+                        ++worked;
+                    }
+                }
+                symbol->Release();
+            }
+
+            perWorkerCount[worker].store(worked);
+            perWorkerMs[worker] = GetTickCount64() - workerStart;
+            enumSymbols->Release();
+            globalScope->Release();
+            session->Release();
+            dataSource->Release();
+            if (comInitialized) CoUninitialize();
+        });
+    }
+
+    for (auto& worker : workers) worker.join();
+
+    bool allWorkersFailed = true;
+    for (unsigned int worker = 0; worker < workerCount; ++worker) {
+        if (!workerFailed[worker]) { allWorkersFailed = false; break; }
+    }
+
+    if (m_stageTimingCallback) {
+        std::wstring detail = L"udt-workers=" + std::to_wstring(workerCount);
+        for (unsigned int worker = 0; worker < workerCount; ++worker) {
+            detail += L" w";
+            detail += std::to_wstring(worker);
+            detail += L":" + std::to_wstring(perWorkerCount[worker].load()) +
+                L"/" + std::to_wstring(perWorkerMs[worker]) + L"ms";
+        }
+        m_stageTimingCallback(detail);
+    }
+
+    // If every worker failed to open a session, fall back to the original
+    // single-session walk instead of silently returning an empty module.
+    if (allWorkersFailed) {
+        const ULONGLONG fallbackStart = GetTickCount64();
+        ParseUdtSymbolsSingleSession(pGlobal, moduleInfo);
+        if (m_stageTimingCallback) {
+            m_stageTimingCallback(L"udt-fallback=" +
+                std::to_wstring(GetTickCount64() - fallbackStart) + L"ms");
+        }
+        return;
+    }
+
+    // Workers each took every workerCount-th symbol, so interleaving results by
+    // local position reproduces the original serial enumeration order.
+    std::vector<size_t> workerCursor(workerCount, 0);
+    size_t remaining = 0;
+    for (unsigned int worker = 0; worker < workerCount; ++worker) {
+        remaining += perWorkerResults[worker].items.size();
+    }
+    while (remaining > 0) {
+        for (unsigned int worker = 0; worker < workerCount; ++worker) {
+            auto& local = perWorkerResults[worker].items;
+            if (workerCursor[worker] >= local.size()) continue;
+            ClassInfo& info = local[workerCursor[worker]++].info;
+            --remaining;
+            if (info.isUnion) moduleInfo.unions.push_back(std::move(info));
+            else if (info.isStruct) moduleInfo.structs.push_back(std::move(info));
+            else moduleInfo.classes.push_back(std::move(info));
+        }
+    }
+}
+
+void PDBParser::ParseUdtSymbolsSingleSession(IDiaSymbol* pGlobal, ModuleInfo& moduleInfo) {
     IDiaEnumSymbols* enumSymbols = nullptr;
     HRESULT hr = pGlobal->findChildren(SymTagUDT, nullptr, nsNone, &enumSymbols);
     if (FAILED(hr) || !enumSymbols) return;
@@ -402,9 +946,7 @@ void PDBParser::ParseClassDetails(IDiaSymbol* pClass, ClassInfo& classInfo) {
         }
         pEnumBase->Release();
     }
-
     ParseMemberVariables(pClass, classInfo.members);
-
     IDiaEnumSymbols* pEnumFunc = nullptr;
     if (SUCCEEDED(pClass->findChildren(SymTagFunction, nullptr, nsNone, &pEnumFunc)) && pEnumFunc) {
         IDiaSymbol* pFunc = nullptr;
@@ -434,7 +976,6 @@ void PDBParser::ParseClassDetails(IDiaSymbol* pClass, ClassInfo& classInfo) {
         }
         pEnumFunc->Release();
     }
-
 }
 
 void PDBParser::ParseMemberVariables(IDiaSymbol* owner, std::vector<MemberVariableInfo>& members, int depth) {
