@@ -234,6 +234,7 @@
     "menu_copy": "复制",
     "menu_search": "搜索所选内容",
     "search_results": "搜索结果",
+    "search_load_more": "加载更多",
     "search_no_results": "没有匹配结果",
 
     "status_reading_debug_info": "正在读取 DLL/EXE 调试信息...",

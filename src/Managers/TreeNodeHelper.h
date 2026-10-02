@@ -2,6 +2,8 @@
 
 #include <windows.h>
 #include <cstddef>
+#include <utility>
+#include <vector>
 
 enum class TreeNodeType {
     Root = 0,
@@ -35,3 +37,28 @@ public:
     
     static const size_t MAX_ITEMS_PER_TYPE = 10000;
 };
+
+enum class TreeCategory {
+    None = 0,
+    Functions = 1,
+    Classes = 2,
+    Structs = 3,
+    Unions = 4,
+    Enums = 5,
+    GlobalVariables = 6
+};
+
+struct VirtualTreeState {
+    TreeCategory category = TreeCategory::None;
+    size_t itemCount = 0;
+    size_t pendingTreeIndex = 0;
+    void* treeParent = nullptr;
+    std::vector<size_t> filteredIndices;
+};
+
+extern VirtualTreeState g_virtualTreeState;
+
+void ResetVirtualTreeState();
+void SetVirtualTreeCategory(TreeCategory category, size_t itemCount);
+void SetVirtualTreeFilter(std::vector<size_t> indices);
+bool IsVirtualTreeCategoryNode(LPARAM param);

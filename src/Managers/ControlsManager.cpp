@@ -1,4 +1,4 @@
-﻿#include "ControlsManager.h"
+#include "ControlsManager.h"
 #include "TreeViewManager.h"
 #include "ListViewManager.h"
 #include "HeaderViewManager.h"
@@ -189,6 +189,17 @@ LRESULT CALLBACK SplitterProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPa
     return CallWindowProcW(g_pOldSplitterProc, hWnd, message, wParam, lParam);
 }
 
+LRESULT CALLBACK TreeViewProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
+    if (message == WM_VSCROLL || message == WM_MOUSEWHEEL ||
+        message == WM_KEYDOWN || message == WM_LBUTTONUP) {
+        LRESULT result = CallWindowProcW(g_pOldTreeViewProc, hWnd, message, wParam, lParam);
+        AutoLoadMoreSearchResults();
+        AutoExtendTreeCategory();
+        return result;
+    }
+    return CallWindowProcW(g_pOldTreeViewProc, hWnd, message, wParam, lParam);
+}
+
 LRESULT CALLBACK ListViewProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     if (message == WM_KEYDOWN && GetKeyState(VK_CONTROL) < 0) {
         if (wParam == 'C') {
@@ -366,6 +377,7 @@ void CreateControls(HWND hWnd) {
     hTreeView = CreateWindowExW(0, WC_TREEVIEWW, L"",
         WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_BORDER | TVS_HASLINES | TVS_HASBUTTONS | TVS_LINESATROOT | WS_VSCROLL,
         0, 0, 0, 0, hWnd, reinterpret_cast<HMENU>(static_cast<UINT_PTR>(ID_TREEVIEW)), hInst, nullptr);
+    g_pOldTreeViewProc = reinterpret_cast<WNDPROC>(SetWindowLongPtrW(hTreeView, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(TreeViewProc)));
 
     hSplitter = CreateWindowExW(0, L"STATIC", L"",
         WS_CHILD | WS_VISIBLE | WS_TABSTOP | SS_NOTIFY,
@@ -386,7 +398,8 @@ void CreateControls(HWND hWnd) {
     TabCtrl_InsertItem(hTabCtrl, 1, &item);
 
     hListView = CreateWindowExW(0, WC_LISTVIEWW, L"",
-        WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_BORDER | LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | WS_VSCROLL | WS_HSCROLL,
+        WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_BORDER | LVS_REPORT | LVS_SINGLESEL |
+        LVS_SHOWSELALWAYS | LVS_OWNERDATA | WS_VSCROLL | WS_HSCROLL,
         0, 0, 0, 0, hTabCtrl, reinterpret_cast<HMENU>(static_cast<UINT_PTR>(ID_LISTVIEW)), hInst, nullptr);
     g_pOldListViewProc = reinterpret_cast<WNDPROC>(SetWindowLongPtrW(hListView, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(ListViewProc)));
 

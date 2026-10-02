@@ -1,5 +1,7 @@
 #include "TreeNodeHelper.h"
 
+VirtualTreeState g_virtualTreeState;
+
 TreeNodeType TreeNodeParamHelper::GetType(DWORD param) {
     if (param == 0) return TreeNodeType::Root;
     if (param >= 1 && param <= 6) {
@@ -58,4 +60,38 @@ bool TreeNodeParamHelper::IsEnumNode(DWORD param) {
 
 bool TreeNodeParamHelper::IsGlobalVarNode(DWORD param) {
     return param >= 60000 && param < 70000;
+}
+
+void ResetVirtualTreeState() {
+
+    g_virtualTreeState = VirtualTreeState{};
+
+}
+
+
+
+void SetVirtualTreeCategory(TreeCategory category, size_t itemCount) {
+
+    g_virtualTreeState.category = category;
+
+    g_virtualTreeState.itemCount = itemCount;
+
+    g_virtualTreeState.filteredIndices.clear();
+
+}
+
+
+
+void SetVirtualTreeFilter(std::vector<size_t> indices) {
+
+    g_virtualTreeState.filteredIndices = std::move(indices);
+
+}
+
+
+
+bool IsVirtualTreeCategoryNode(LPARAM param) {
+
+    return false;
+
 }

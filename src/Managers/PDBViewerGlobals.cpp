@@ -38,5 +38,6 @@ WNDPROC g_pOldClearButtonProc = nullptr;
 WNDPROC g_pOldRichEditProc = nullptr;
 WNDPROC g_pOldSplitterProc = nullptr;
 WNDPROC g_pOldListViewProc = nullptr;
+WNDPROC g_pOldTreeViewProc = nullptr;
 
 int g_lastClickedSubItem = 0;

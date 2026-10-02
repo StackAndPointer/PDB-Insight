@@ -57,5 +57,6 @@ extern WNDPROC g_pOldClearButtonProc;
 extern WNDPROC g_pOldRichEditProc;
 extern WNDPROC g_pOldSplitterProc;
 extern WNDPROC g_pOldListViewProc;
+extern WNDPROC g_pOldTreeViewProc;
 
 extern int g_lastClickedSubItem;

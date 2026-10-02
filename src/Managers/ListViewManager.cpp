@@ -3,9 +3,93 @@
 #include "FunctionInfoDisplayManager.h"
 #include "LanguageManager.h"
 #include "TreeNodeHelper.h"
+#include "TreeViewManager.h"
+namespace {
+bool g_listViewVirtual = false;
+
+void GetVirtualFunctionText(size_t index, size_t subItem, std::wstring& text) {
+    if (index >= g_moduleInfo.functions.size()) return;
+    const auto& func = g_moduleInfo.functions[index];
+    switch (subItem) {
+        case 0: text = func.undecoratedName.empty() ? func.name : func.undecoratedName; break;
+        case 1: text = func.returnType; break;
+        case 2: text = PDBParser::CallingConventionToString(func.callingConvention); break;
+        case 3: { std::wstringstream ss; ss << std::hex << std::showbase << func.rva; text = ss.str(); break; }
+        case 4: text = std::to_wstring(func.size); break;
+        case 5: text = func.className; break;
+    }
+}
+
+void GetVirtualClassText(const std::vector<ClassInfo>& classes, size_t index,
+                         size_t subItem, std::wstring& text) {
+    if (index >= classes.size()) return;
+    const auto& cls = classes[index];
+    switch (subItem) {
+        case 0: text = cls.name; break;
+        case 1: text = std::to_wstring(cls.size); break;
+        case 2: text = std::to_wstring(cls.members.size()); break;
+        case 3: text = std::to_wstring(cls.baseClasses.size()); break;
+    }
+}
+
+void GetVirtualEnumText(size_t index, size_t subItem, std::wstring& text) {
+    if (index >= g_moduleInfo.enums.size()) return;
+    const auto& enm = g_moduleInfo.enums[index];
+    switch (subItem) {
+        case 0: text = enm.name; break;
+        case 1: text = enm.underlyingType; break;
+        case 2: text = std::to_wstring(enm.values.size()); break;
+    }
+}
+
+void GetVirtualGlobalText(size_t index, size_t subItem, std::wstring& text) {
+    if (index >= g_moduleInfo.globalVariables.size()) return;
+    const auto& var = g_moduleInfo.globalVariables[index];
+    switch (subItem) {
+        case 0: text = var.name; break;
+        case 1: text = var.type; break;
+        case 2: { std::wstringstream ss; ss << std::hex << std::showbase << var.rva; text = ss.str(); break; }
+        case 3: { std::wstringstream ss; ss << std::hex << std::showbase << var.virtualAddress; text = ss.str(); break; }
+        case 4: text = std::to_wstring(var.size); break;
+    }
+}
+}
+
+void HandleListViewGetDispInfo(NMLVDISPINFOW* info) {
+    if (!info || !info->item.pszText || !g_listViewVirtual) return;
+    if (!(info->item.mask & LVIF_TEXT)) return;
+
+    std::wstring text;
+    const size_t index = static_cast<size_t>(info->item.iItem);
+    const size_t subItem = static_cast<size_t>(info->item.iSubItem);
+    switch (g_virtualTreeState.category) {
+        case TreeCategory::Functions: GetVirtualFunctionText(index, subItem, text); break;
+        case TreeCategory::Classes: GetVirtualClassText(g_moduleInfo.classes, index, subItem, text); break;
+        case TreeCategory::Structs: GetVirtualClassText(g_moduleInfo.structs, index, subItem, text); break;
+        case TreeCategory::Unions: GetVirtualClassText(g_moduleInfo.unions, index, subItem, text); break;
+        case TreeCategory::Enums: GetVirtualEnumText(index, subItem, text); break;
+        case TreeCategory::GlobalVariables: GetVirtualGlobalText(index, subItem, text); break;
+        default: return;
+    }
+
+    const size_t capacity = static_cast<size_t>(info->item.cchTextMax);
+    if (capacity == 0) return;
+    wcsncpy_s(info->item.pszText, capacity, text.c_str(), _TRUNCATE);
+}
 
 void PopulateListView(HTREEITEM hItem)
 {
+    if (hItem) {
+        TVITEM treeItem{};
+        treeItem.hItem = hItem;
+        treeItem.mask = TVIF_PARAM | TVIF_CHILDREN;
+        if (TreeView_GetItem(hTreeView, &treeItem) &&
+            treeItem.lParam >= 1 && treeItem.lParam <= 6 &&
+            treeItem.cChildren == 1) {
+            ExpandLazyTreeItem(hItem);
+        }
+    }
+
     ListView_DeleteAllItems(hListView);
     SendMessageW(hListView, WM_SETREDRAW, FALSE, 0);
 
@@ -25,6 +109,7 @@ void PopulateListView(HTREEITEM hItem)
     TreeView_GetItem(hTreeView, &tvi);
 
     DWORD param = (DWORD)tvi.lParam;
+    g_listViewVirtual = false;
 
     if (param == 1)
     {
@@ -35,7 +120,13 @@ void PopulateListView(HTREEITEM hItem)
         AddListViewColumn(4, LanguageManager::GetInstance().GetString(L"col_size", L"大小"), 80);
         AddListViewColumn(5, LanguageManager::GetInstance().GetString(L"col_class_name", L"类名"), 150);
 
-        for (size_t i = 0; i < g_moduleInfo.functions.size(); ++i)
+        const bool useVirtual = g_virtualTreeState.category == TreeCategory::Functions &&
+            g_moduleInfo.functions.size() > 5000;
+        g_listViewVirtual = useVirtual;
+        ListView_SetItemCountEx(hListView, static_cast<int>(g_moduleInfo.functions.size()),
+            LVSICF_NOINVALIDATEALL | LVSICF_NOSCROLL);
+
+        for (size_t i = 0; !useVirtual && i < g_moduleInfo.functions.size(); ++i)
         {
             const auto& func = g_moduleInfo.functions[i];
             LVITEM lvi;
@@ -73,7 +164,16 @@ void PopulateListView(HTREEITEM hItem)
             AddListViewColumn(2, LanguageManager::GetInstance().GetString(L"col_member_count", L"成员数量"), 100);
             AddListViewColumn(3, LanguageManager::GetInstance().GetString(L"col_base_count", L"基类数量"), 100);
 
-            for (size_t i = 0; i < pClasses->size(); ++i)
+            const bool useVirtual =
+                ((g_virtualTreeState.category == TreeCategory::Classes && param == 2) ||
+                 (g_virtualTreeState.category == TreeCategory::Structs && param == 3) ||
+                 (g_virtualTreeState.category == TreeCategory::Unions && param == 4)) &&
+                pClasses->size() > 5000;
+            g_listViewVirtual = useVirtual;
+            ListView_SetItemCountEx(hListView, static_cast<int>(pClasses->size()),
+                LVSICF_NOINVALIDATEALL | LVSICF_NOSCROLL);
+
+            for (size_t i = 0; !useVirtual && i < pClasses->size(); ++i)
             {
                 const auto& cls = (*pClasses)[i];
                 LVITEM lvi;
@@ -103,7 +203,13 @@ void PopulateListView(HTREEITEM hItem)
         AddListViewColumn(1, LanguageManager::GetInstance().GetString(L"col_type", L"类型"), 150);
         AddListViewColumn(2, LanguageManager::GetInstance().GetString(L"col_member_count", L"值数量"), 100);
 
-        for (size_t i = 0; i < g_moduleInfo.enums.size(); ++i)
+        const bool useVirtual = g_virtualTreeState.category == TreeCategory::Enums &&
+            g_moduleInfo.enums.size() > 5000;
+        g_listViewVirtual = useVirtual;
+        ListView_SetItemCountEx(hListView, static_cast<int>(g_moduleInfo.enums.size()),
+            LVSICF_NOINVALIDATEALL | LVSICF_NOSCROLL);
+
+        for (size_t i = 0; !useVirtual && i < g_moduleInfo.enums.size(); ++i)
         {
             const auto& enm = g_moduleInfo.enums[i];
             LVITEM lvi;
@@ -128,7 +234,13 @@ void PopulateListView(HTREEITEM hItem)
         AddListViewColumn(3, LanguageManager::GetInstance().GetString(L"col_virtual_address", L"虚拟地址"), 150);
         AddListViewColumn(4, LanguageManager::GetInstance().GetString(L"col_size", L"大小"), 80);
 
-        for (size_t i = 0; i < g_moduleInfo.globalVariables.size(); ++i)
+        const bool useVirtual = g_virtualTreeState.category == TreeCategory::GlobalVariables &&
+            g_moduleInfo.globalVariables.size() > 5000;
+        g_listViewVirtual = useVirtual;
+        ListView_SetItemCountEx(hListView, static_cast<int>(g_moduleInfo.globalVariables.size()),
+            LVSICF_NOINVALIDATEALL | LVSICF_NOSCROLL);
+
+        for (size_t i = 0; !useVirtual && i < g_moduleInfo.globalVariables.size(); ++i)
         {
             const auto& var = g_moduleInfo.globalVariables[i];
             LVITEM lvi;

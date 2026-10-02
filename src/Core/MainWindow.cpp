@@ -208,8 +208,19 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 
     case WM_NOTIFY: {
         const NMHDR* header = reinterpret_cast<const NMHDR*>(lParam);
+        if (header->idFrom == ID_TREEVIEW && header->code == TVN_ITEMEXPANDING) {
+            const NMTREEVIEW* treeView = reinterpret_cast<const NMTREEVIEW*>(lParam);
+            if (HandleSearchTreeNotification(treeView)) return 0;
+            if (treeView->action == TVE_EXPAND) ExpandLazyTreeItem(treeView->itemNew.hItem);
+            return 0;
+        }
+        if (header->idFrom == ID_LISTVIEW && header->code == LVN_GETDISPINFO) {
+            HandleListViewGetDispInfo(reinterpret_cast<NMLVDISPINFOW*>(lParam));
+            return 0;
+        }
         if (header->idFrom == ID_TREEVIEW && header->code == TVN_SELCHANGED) {
             const NMTREEVIEW* treeView = reinterpret_cast<const NMTREEVIEW*>(lParam);
+            if (HandleSearchTreeSelection(treeView->itemNew.hItem)) return 0;
             if (TabCtrl_GetCurSel(hTabCtrl) == 0) PopulateListView(treeView->itemNew.hItem);
             else ShowHeaderView(treeView->itemNew.hItem);
             return 0;
