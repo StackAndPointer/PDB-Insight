@@ -54,6 +54,8 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow, LPWSTR lpCmdLine) {
     g_currentLanguage = ConfigManager::GetInstance().GetLanguage();
     DPIManager::Initialize();
     FontManager::Initialize();
+    FontManager::ApplyFontSettings(ConfigManager::GetInstance().GetUiFontName(),
+                                   ConfigManager::GetInstance().GetCodeFontName());
     if (!LanguageManager::GetInstance().LoadLanguageByCode(g_currentLanguage)) {
         LanguageManager::GetInstance().DetectAndLoadSystemLanguage();
     }

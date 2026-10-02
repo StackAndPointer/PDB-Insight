@@ -212,6 +212,11 @@
     "group_ida_compatibility": "IDA兼容性",
     "opt_ida_compatible": "IDA兼容格式(纯C结构体)",
     
+    "group_fonts": "字体",
+    "opt_ui_font": "界面字体",
+    "opt_code_font": "代码字体",
+    "font_system_default": "系统默认",
+    "font_code_default": "默认等宽字体",
     "group_download_options": "下载选项",
     "opt_use_mirror_source": "使用镜像源加速下载",
     "opt_custom_mirror_url": "自定义镜像源地址",

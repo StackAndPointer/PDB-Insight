@@ -272,7 +272,10 @@ void ShowHeaderView(HTREEITEM hItem)
             const auto& enm = g_moduleInfo.enums[idx];
             std::wostringstream ss;
             ss << T(L"comment_auto_generated_enum", L"// Auto-generated enum definition") + L"\r\n\r\n";
-            ss << PDBHeaderGenerator::GenerateEnumDeclaration(enm, g_numberMode);
+            ExportSettings enumSettings = ConfigManager::GetInstance().GetExportSettings();
+            enumSettings.flattenNamespaces = false;
+            enumSettings.idaCompatible = false;
+            ss << PDBHeaderGenerator::GenerateEnumDeclaration(enm, enumSettings, g_numberMode);
             ss << L"\r\n" + T(L"comment_additional_info", L"// Additional Information:") + L"\r\n";
             ss << T(L"comment_underlying_type", L"// Underlying type: ") << (enm.underlyingType.empty() ? L"int" : enm.underlyingType) << L"\r\n";
             ss << T(L"comment_value_count", L"// Value count: ") << enm.values.size() << L"\r\n";

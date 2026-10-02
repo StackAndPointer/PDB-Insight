@@ -20,6 +20,8 @@ private:
     bool SaveSettings(HWND owner);
     void OnSize(HWND window);
     void UpdateMirrorControls();
+    void PopulateFontControls();
+    void RefreshFontControls();
 
     HWND m_window;
     HWND m_parent;
@@ -30,6 +32,11 @@ private:
     HWND m_checkExpandAnonymous;
     HWND m_groupIda;
     HWND m_checkIdaCompatible;
+    HWND m_groupFonts;
+    HWND m_labelUiFont;
+    HWND m_comboUiFont;
+    HWND m_labelCodeFont;
+    HWND m_comboCodeFont;
     HWND m_groupDownload;
     HWND m_checkUseMirror;
     HWND m_labelMirrorUrl;

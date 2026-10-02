@@ -15,6 +15,8 @@ ConfigManager::ConfigManager()
     , m_numberMode(NUMBER_HEX)
     , m_expandBaseClasses(false)
     , m_useMirrorSource(false) {
+    m_uiFontName = L"";
+    m_codeFontName = L"";
 }
 
 std::wstring ConfigManager::GetConfigFilePath() {
@@ -65,6 +67,10 @@ bool ConfigManager::Load() {
                 m_useMirrorSource = (value == L"1");
             } else if (key == L"mirrorSourceUrl") {
                 m_mirrorSourceUrl = value;
+            } else if (key == L"uiFontName") {
+                m_uiFontName = value;
+            } else if (key == L"codeFontName") {
+                m_codeFontName = value;
             } else if (key.find(L"searchHistory[") == 0 && key.back() == L']') {
                 m_searchHistory.push_back(value);
             }
@@ -93,6 +99,8 @@ bool ConfigManager::Save() {
     file << L"exportIncludeEnumsInEnumsH=" << (m_exportSettings.includeEnumsInEnumsH ? L"1" : L"0") << L"\n";
     file << L"useMirrorSource=" << (m_useMirrorSource ? L"1" : L"0") << L"\n";
     file << L"mirrorSourceUrl=" << m_mirrorSourceUrl << L"\n";
+    file << L"uiFontName=" << m_uiFontName << L"\n";
+    file << L"codeFontName=" << m_codeFontName << L"\n";
     
     for (size_t i = 0; i < m_searchHistory.size(); ++i) {
         file << L"searchHistory[" << i << L"]=" << m_searchHistory[i] << L"\n";

@@ -38,6 +38,11 @@ public:
     std::wstring GetMirrorSourceUrl() const { return m_mirrorSourceUrl; }
     void SetMirrorSourceUrl(const std::wstring& url) { m_mirrorSourceUrl = url; }
 
+    std::wstring GetUiFontName() const { return m_uiFontName; }
+    void SetUiFontName(const std::wstring& name) { m_uiFontName = name; }
+    std::wstring GetCodeFontName() const { return m_codeFontName; }
+    void SetCodeFontName(const std::wstring& name) { m_codeFontName = name; }
+
     const std::vector<std::wstring>& GetSearchHistory() const { return m_searchHistory; }
     void AddSearchHistory(const std::wstring& text);
     void ClearSearchHistory();
@@ -55,6 +60,8 @@ private:
     bool m_expandBaseClasses;
     bool m_useMirrorSource;
     std::wstring m_mirrorSourceUrl;
+    std::wstring m_uiFontName;
+    std::wstring m_codeFontName;
     ExportSettings m_exportSettings;
     std::vector<std::wstring> m_searchHistory;
     static const size_t MAX_SEARCH_HISTORY = 20;

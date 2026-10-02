@@ -212,6 +212,11 @@
     "group_ida_compatibility": "IDA Compatibility",
     "opt_ida_compatible": "IDA Compatible Format(Pure C Struct)",
     
+    "group_fonts": "Fonts",
+    "opt_ui_font": "Interface Font",
+    "opt_code_font": "Code Font",
+    "font_system_default": "System Default",
+    "font_code_default": "Default Monospace",
     "group_download_options": "Download Options",
     "opt_use_mirror_source": "Use Mirror Source for Faster Download",
     "opt_custom_mirror_url": "Custom Mirror URL",
