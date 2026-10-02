@@ -953,9 +953,19 @@ void PDBParser::ParseClassDetails(IDiaSymbol* pClass, ClassInfo& classInfo) {
         ULONG celt = 0;
         int vtableIndex = 0;
         while (!IsCancelled() && SUCCEEDED(pEnumFunc->Next(1, &pFunc, &celt)) && celt == 1) {
+            std::wstring memberName = GetSymbolName(pFunc);
+            classInfo.memberFunctions.push_back(memberName);
+            BOOL isVirtual = FALSE;
+            pFunc->get_virtual(&isVirtual);
+            if (!isVirtual) {
+                pFunc->Release();
+                continue;
+            }
+
             FunctionInfo functionInfo;
             ParseFunctionDetails(pFunc, functionInfo);
-            classInfo.memberFunctions.push_back(functionInfo.name);
+            functionInfo.name = std::move(memberName);
+            functionInfo.isVirtual = isVirtual != FALSE;
             if (functionInfo.isVirtual) {
                 VirtualFunctionInfo virtualInfo;
                 virtualInfo.name = functionInfo.name;
