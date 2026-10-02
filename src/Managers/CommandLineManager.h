@@ -15,6 +15,7 @@ struct CommandLineOptions {
     std::wstring className;
     bool exportAll = false;
     bool listClasses = false;
+    bool measureTiming = false;
 };
 
 class CommandLineManager {

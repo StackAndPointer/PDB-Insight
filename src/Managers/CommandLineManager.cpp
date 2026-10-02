@@ -8,6 +8,7 @@
 #include <sstream>
 #include <algorithm>
 #include <shellapi.h>
+#include <chrono>
 
 #pragma comment(lib, "shell32.lib")
 
@@ -63,6 +64,9 @@ bool CommandLineManager::ParseCommandLine(LPWSTR lpCmdLine) {
         }
         else if (lowerArg == L"-l" || lowerArg == L"--list") {
             m_options.listClasses = true;
+        }
+        else if (lowerArg == L"--timing") {
+            m_options.measureTiming = true;
         }
         else if (IsPdbFile(arg)) {
             m_options.pdbPath = ExtractFilePath(arg);
@@ -222,6 +226,12 @@ int CommandLineManager::RunCommandLine() const {
     if (!LanguageManager::GetInstance().LoadLanguageByCode(configuredLanguage)) {
         LanguageManager::GetInstance().DetectAndLoadSystemLanguage();
     }
+    HRESULT comResult = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    if (FAILED(comResult) && comResult != RPC_E_CHANGED_MODE) {
+        WriteCommandLineLine(errorOutput, L"Failed to initialize COM");
+        return 3;
+    }
+
     std::wstring pdbPath = m_options.pdbPath;
     if (pdbPath.empty() && ShouldAutoDownloadPdb()) {
         PDBDownloadResult download = PDBDownloader::GetInstance().DownloadPDBForDll(m_options.dllPath);
@@ -238,15 +248,45 @@ int CommandLineManager::RunCommandLine() const {
     }
 
     PDBParser parser;
+    int lastReportedProgress = -1;
     parser.SetProgressCallback([&](int percent, const std::wstring& status) {
+        if (m_options.quietMode) return;
+        if (percent < 100 && percent - lastReportedProgress < 5) return;
+        lastReportedProgress = percent;
         WriteCommandLineLine(errorOutput, L"Progress " + std::to_wstring(percent) + L"%: " + status);
     });
+    std::vector<std::wstring> stageTimings;
+    if (m_options.measureTiming) {
+        parser.SetStageTimingCallback([&stageTimings](const std::wstring& fragment) {
+            stageTimings.push_back(fragment);
+        });
+    }
     if (!parser.LoadPDB(pdbPath)) {
         WriteCommandLineLine(errorOutput, L"Failed to open PDB: " + parser.GetLastError());
         return 3;
     }
+    const auto parseStart = std::chrono::steady_clock::now();
     ModuleInfo module = parser.ParseModule();
+    const auto parseEnd = std::chrono::steady_clock::now();
     module.pdbFileName = pdbPath;
+
+    if (m_options.measureTiming) {
+        const auto parseMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+            parseEnd - parseStart).count();
+        std::wstring stageText;
+        for (const auto& fragment : stageTimings) {
+            if (!stageText.empty()) stageText += L" ";
+            stageText += fragment;
+        }
+        WriteCommandLineLine(errorOutput,
+            L"Timing: parse " + std::to_wstring(parseMs) + L" ms | classes " +
+            std::to_wstring(module.classes.size()) + L" structs " +
+            std::to_wstring(module.structs.size()) + L" unions " +
+            std::to_wstring(module.unions.size()));
+        if (!stageText.empty()) {
+            WriteCommandLineLine(errorOutput, L"Timing: stages " + stageText);
+        }
+    }
 
     if (m_options.listClasses) {
         auto writeGroup = [&](const wchar_t* label, const std::vector<ClassInfo>& types) {
@@ -290,25 +330,46 @@ int CommandLineManager::RunCommandLine() const {
             const ClassInfo* type = FindCommandLineType(module, m_options.className);
             if (!type) {
                 WriteCommandLineLine(errorOutput, L"Class/struct not found: " + m_options.className);
+                if (SUCCEEDED(comResult)) CoUninitialize();
                 return 4;
             }
             const std::wstring baseName = settings.flattenNamespaces
                 ? PDBHeaderGenerator::FlattenName(type->name) : type->name;
             outputPath = ResolveCommandLineFile(outputPath, baseName + L".h");
+            if (!m_options.exportPath.empty()) {
+                const DWORD attributes = GetFileAttributesW(m_options.exportPath.c_str());
+                const bool exportPathIsDirectory = attributes != INVALID_FILE_ATTRIBUTES &&
+                    (attributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+                if (!exportPathIsDirectory) {
+                    const size_t separator = outputPath.find_last_of(L"\\/");
+                    if (separator != std::wstring::npos) {
+                        const std::wstring parent = outputPath.substr(0, separator);
+                        if (!EnsureCommandLineDirectory(parent)) {
+                            WriteCommandLineLine(errorOutput,
+                                L"Cannot create output directory: " + parent);
+                            if (SUCCEEDED(comResult)) CoUninitialize();
+                            return 4;
+                        }
+                    }
+                }
+            }
             success = PDBHeaderGenerator::GenerateClassHeader(*type, outputPath, settings,
                 numberMode, expandBaseClasses, &module);
         }
     } else {
         WriteCommandLineLine(errorOutput, L"Unsupported export format: " + m_options.exportFormat);
+        if (SUCCEEDED(comResult)) CoUninitialize();
         return 2;
     }
 
     if (!success) {
         WriteCommandLineLine(errorOutput, L"Export failed: " + outputPath);
+        if (SUCCEEDED(comResult)) CoUninitialize();
         return 4;
     }
 
     WriteCommandLineLine(output, L"Exported: " + outputPath);
+    if (SUCCEEDED(comResult)) CoUninitialize();
     return 0;
 }
 
