@@ -12,6 +12,87 @@ bool IsIdentChar(WCHAR c) {
     return IsIdentStart(c) || (c >= L'0' && c <= L'9');
 }
 
+bool IsDigit(WCHAR c) {
+    return c >= L'0' && c <= L'9';
+}
+
+bool IsHexDigit(WCHAR c) {
+    return IsDigit(c) || (c >= L'a' && c <= L'f') || (c >= L'A' && c <= L'F');
+}
+
+bool IsBinaryDigit(WCHAR c) {
+    return c == L'0' || c == L'1';
+}
+
+bool IsNumericSuffixChar(WCHAR c) {
+    switch (c) {
+    case L'u': case L'U':
+    case L'l': case L'L':
+    case L'f': case L'F':
+    case L'z': case L'Z':
+        return true;
+    default:
+        return false;
+    }
+}
+
+size_t ConsumeDigits(const std::wstring& text, size_t pos,
+                     bool (*predicate)(WCHAR)) {
+    while (pos < text.size() && predicate(text[pos])) ++pos;
+    return pos;
+}
+
+size_t ConsumeNumericSuffix(const std::wstring& text, size_t pos) {
+    while (pos < text.size() && IsNumericSuffixChar(text[pos])) ++pos;
+    return pos;
+}
+
+size_t ConsumeExponent(const std::wstring& text, size_t pos) {
+    if (pos >= text.size() || (text[pos] != L'e' && text[pos] != L'E')) {
+        return pos;
+    }
+    ++pos;
+    if (pos < text.size() && (text[pos] == L'+' || text[pos] == L'-')) ++pos;
+    if (pos >= text.size() || !IsDigit(text[pos])) return pos;
+    return ConsumeDigits(text, pos, IsDigit);
+}
+
+size_t ConsumeNumericLiteral(const std::wstring& text, size_t pos) {
+    const bool startsWithDot = text[pos] == L'.';
+    if (startsWithDot) {
+        pos = ConsumeDigits(text, pos + 1, IsDigit);
+    } else if (pos + 1 < text.size() && text[pos] == L'0' &&
+               (text[pos + 1] == L'x' || text[pos + 1] == L'X')) {
+        const size_t digitsBegin = pos + 2;
+        const size_t end = ConsumeDigits(text, digitsBegin, IsHexDigit);
+        if (end == digitsBegin) return end;
+        return ConsumeNumericSuffix(text, end);
+    } else if (pos + 1 < text.size() && text[pos] == L'0' &&
+               (text[pos + 1] == L'b' || text[pos + 1] == L'B')) {
+        const size_t digitsBegin = pos + 2;
+        const size_t end = ConsumeDigits(text, digitsBegin, IsBinaryDigit);
+        if (end == digitsBegin) return end;
+        return ConsumeNumericSuffix(text, end);
+    } else {
+        pos = ConsumeDigits(text, pos, IsDigit);
+    }
+
+    if (pos < text.size() && text[pos] == L'.') {
+        pos = ConsumeDigits(text, pos + 1, IsDigit);
+    }
+    const size_t exponentEnd = ConsumeExponent(text, pos);
+    if (exponentEnd == pos && (startsWithDot || (pos > 0 && text[pos - 1] == L'.'))) {
+        return pos;
+    }
+    pos = exponentEnd;
+    pos = ConsumeNumericSuffix(text, pos);
+    return pos;
+}
+
+bool IsNumericLiteralBoundary(const std::wstring& text, size_t pos) {
+    return pos >= text.size() || (!IsIdentChar(text[pos]) && text[pos] != L'.');
+}
+
 struct LexedIdentifier {
     size_t begin = 0;
     size_t end = 0;
@@ -84,10 +165,6 @@ std::vector<SyntaxKind> ClassifyIdentifiers(
     }
 
     for (size_t i = 0; i + 1 < identifiers.size(); ++i) {
-        if (!identifiers[i].text.empty() &&
-            identifiers[i].text[0] >= L'0' && identifiers[i].text[0] <= L'9') {
-            continue;
-        }
         if (identifiers[i].end + 2 != identifiers[i + 1].begin ||
             !IsQualifiedSeparator(sourceText, identifiers[i].end)) {
             continue;
@@ -226,18 +303,13 @@ std::vector<SyntaxSpan> BuildSyntaxSpans(const std::wstring& sourceText) {
             continue;
         }
 
-        if ((sourceText[pos] >= L'0' && sourceText[pos] <= L'9') ||
+        if ((IsDigit(sourceText[pos])) ||
             (sourceText[pos] == L'.' && pos + 1 < sourceText.size() &&
-             sourceText[pos + 1] >= L'0' && sourceText[pos + 1] <= L'9')) {
-            size_t end = pos + 1;
-            while (end < sourceText.size()) {
-                const WCHAR c = sourceText[end];
-                if ((c >= L'0' && c <= L'9') || (c >= L'a' && c <= L'z') ||
-                    (c >= L'A' && c <= L'Z') || c == L'.' || c == L'\'' || c == L'x') {
-                    ++end;
-                } else {
-                    break;
-                }
+             IsDigit(sourceText[pos + 1]))) {
+            size_t end = ConsumeNumericLiteral(sourceText, pos);
+            if (!IsNumericLiteralBoundary(sourceText, end)) {
+                ++pos;
+                continue;
             }
             spans.push_back({pos, end, SyntaxKind::Literal});
             pos = end;
@@ -247,7 +319,22 @@ std::vector<SyntaxSpan> BuildSyntaxSpans(const std::wstring& sourceText) {
         ++pos;
     }
 
+    std::vector<SyntaxSpan> literalSpans = spans;
     const std::vector<LexedIdentifier> identifiers = LexIdentifiers(sourceText, spans);
+    for (auto it = literalSpans.begin(); it != literalSpans.end();) {
+        const size_t begin = it->begin;
+        const size_t end = it->end;
+        const bool embedded = std::find_if(identifiers.begin(), identifiers.end(),
+            [begin, end](const LexedIdentifier& identifier) {
+                return identifier.begin < end && begin < identifier.end;
+            }) != identifiers.end();
+        if (!embedded) {
+            ++it;
+            continue;
+        }
+        it = literalSpans.erase(it);
+    }
+    spans.swap(literalSpans);
     const std::vector<SyntaxKind> kinds = ClassifyIdentifiers(
         sourceText, identifiers, keywords, typeNames);
     for (size_t i = 0; i < identifiers.size(); ++i) {
