@@ -210,6 +210,7 @@ void ShowHeaderView(HTREEITEM hItem)
             
             ExportSettings settings = ConfigManager::GetInstance().GetExportSettings();
             settings.flattenNamespaces = false;
+            settings.idaCompatible = false;
             
             if (pClass->isUnion) {
                 ss << PDBHeaderGenerator::GenerateUnionDeclaration(*pClass, settings, g_numberMode, g_expandBaseClasses, &g_moduleInfo);

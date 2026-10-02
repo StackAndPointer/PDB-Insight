@@ -7,34 +7,41 @@
 #include <fstream>
 
 namespace {
-std::wstring RenderDeclarationImpl(const TypeRef& type, const std::wstring& name) {
-    std::wstring prefix = type.isConst ? L"const " : L"";
-    if (type.isVolatile) prefix += L"volatile ";
+std::wstring RenderTypeQualifiers(const TypeRef& type) {
+    std::wstring qualifiers;
+    if (type.isConst) qualifiers += L"const ";
+    if (type.isVolatile) qualifiers += L"volatile ";
+    return qualifiers;
+}
 
+std::wstring RenderDeclarationImpl(const TypeRef& type, const std::wstring& name) {
     switch (type.kind) {
     case TypeRefKind::Pointer:
     case TypeRefKind::Reference: {
         std::wstring declarator;
         if (type.kind == TypeRefKind::Reference) {
-            declarator = type.isRValueReference ? L"&&" : L"&";
+            declarator = name.empty() ? L"" : name;
+            declarator += type.isRValueReference ? L"&&" : L"&";
         } else {
-            declarator = L"*";
+            declarator = L"*" + name;
             if (type.isConst) declarator += L" const";
             if (type.isVolatile) declarator += L" volatile";
         }
-        declarator += name;
         if (type.child && (type.child->kind == TypeRefKind::Array ||
                            type.child->kind == TypeRefKind::Function)) {
             declarator = L"(" + declarator + L")";
         }
-        return type.child ? RenderDeclarationImpl(*type.child, declarator) : prefix + declarator;
+        if (type.child) {
+            return RenderDeclarationImpl(*type.child, declarator);
+        }
+        return RenderTypeQualifiers(type) + declarator;
     }
     case TypeRefKind::Array: {
         std::wstring suffix = L"[";
         if (type.hasKnownArrayCount) suffix += std::to_wstring(type.arrayCount);
         suffix += L"]";
         return type.child ? RenderDeclarationImpl(*type.child, name + suffix)
-                          : prefix + name + suffix;
+                          : RenderTypeQualifiers(type) + name + suffix;
     }
     case TypeRefKind::Function: {
         std::wstring parameters = L"(";
@@ -47,11 +54,11 @@ std::wstring RenderDeclarationImpl(const TypeRef& type, const std::wstring& name
         }
         parameters += L")";
         return type.child ? RenderDeclarationImpl(*type.child, name + parameters)
-                          : prefix + name + parameters;
+                          : RenderTypeQualifiers(type) + name + parameters;
     }
     case TypeRefKind::Named:
     default: {
-        std::wstring baseType = prefix + type.name;
+        std::wstring baseType = RenderTypeQualifiers(type) + type.name;
         if (baseType.empty()) return name;
         return name.empty() ? baseType : baseType + L" " + name;
     }

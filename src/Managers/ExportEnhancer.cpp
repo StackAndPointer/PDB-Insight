@@ -99,21 +99,18 @@ std::wstring ExportEnhancer::GenerateIDACompatibleHeader(const ModuleInfo& modul
 }
 
 bool ExportEnhancer::ExportEnhancedHeader(const ClassInfo& cls, const std::wstring& filePath, const ExportOptions& options, NumberDisplayMode numberMode, bool expandBaseClasses, const ModuleInfo* moduleInfo) {
+    ExportSettings settings;
+    settings.flattenNamespaces = options.flattenNamespaces;
+    settings.removeVoidParams = options.removeVoidParams;
+    settings.idaCompatible = false;
+
     std::wstring content;
     if (cls.isStruct) {
-        content = PDBHeaderGenerator::GenerateStructDeclaration(cls, numberMode, expandBaseClasses, moduleInfo);
+        content = PDBHeaderGenerator::GenerateStructDeclaration(cls, settings, numberMode, expandBaseClasses, moduleInfo);
     } else if (cls.isUnion) {
-        content = PDBHeaderGenerator::GenerateUnionDeclaration(cls, numberMode);
+        content = PDBHeaderGenerator::GenerateUnionDeclaration(cls, settings, numberMode, expandBaseClasses, moduleInfo);
     } else {
-        content = PDBHeaderGenerator::GenerateClassDeclaration(cls, numberMode, expandBaseClasses, moduleInfo);
-    }
-    
-    if (options.flattenNamespaces) {
-        content = FlattenName(content);
-    }
-    
-    if (options.removeVoidParams) {
-        content = RemoveVoidFromParams(content);
+        content = PDBHeaderGenerator::GenerateClassDeclaration(cls, settings, numberMode, expandBaseClasses, moduleInfo);
     }
     
     std::wofstream file(filePath);
