@@ -1,4 +1,5 @@
 #include "HeaderViewManager.h"
+#include "FontManager.h"
 #include <algorithm>
 #include <unordered_set>
 
@@ -381,11 +382,26 @@ static std::wstring ReadRichEditText(HWND hRichEdit) {
     return text;
 }
 
+void ApplyRichEditCodeFont(HWND hRichEdit) {
+    HFONT font = FontManager::GetCodeFont();
+    if (font) SendMessageW(hRichEdit, WM_SETFONT, reinterpret_cast<WPARAM>(font), TRUE);
+}
+
+void FillCodeFaceAndSize(CHARFORMAT2& cf) {
+    HFONT font = FontManager::GetCodeFont();
+    if (!font) return;
+    LOGFONTW lf{};
+    if (GetObjectW(font, sizeof(lf), &lf) <= 0) return;
+    wcsncpy_s(cf.szFaceName, lf.lfFaceName, _TRUNCATE);
+    cf.yHeight = static_cast<LONG>(MulDiv(-lf.lfHeight, 72 * 20, FontManager::GetDPI()));
+}
+
 void SetRichEditRangeColor(HWND hRichEdit, LONG start, LONG end, COLORREF color) {
     CHARFORMAT2 cf{};
     cf.cbSize = sizeof(cf);
-    cf.dwMask = CFM_COLOR;
+    cf.dwMask = CFM_COLOR | CFM_FACE | CFM_SIZE;
     cf.crTextColor = color;
+    FillCodeFaceAndSize(cf);
     CHARRANGE range{start, end};
     SendMessageW(hRichEdit, EM_EXSETSEL, 0, reinterpret_cast<LPARAM>(&range));
     SendMessageW(hRichEdit, EM_SETCHARFORMAT, SCF_SELECTION,
@@ -402,6 +418,8 @@ void ApplySyntaxHighlighting(HWND hRichEdit, const std::wstring& text,
     const std::vector<SyntaxSpan> actualSpans = textMatchesControl
         ? spans : BuildSyntaxSpans(actualText);
 
+    ApplyRichEditCodeFont(hRichEdit);
+
     const COLORREF COLOR_KEYWORD = RGB(0, 0, 255);
     const COLORREF COLOR_COMMENT = RGB(0, 128, 0);
     const COLORREF COLOR_STRING = RGB(163, 21, 21);
@@ -416,9 +434,10 @@ void ApplySyntaxHighlighting(HWND hRichEdit, const std::wstring& text,
     SendMessageW(hRichEdit, WM_SETREDRAW, FALSE, 0);
     CHARFORMAT2 cf{};
     cf.cbSize = sizeof(cf);
-    cf.dwMask = CFM_COLOR | CFM_BOLD;
-    cf.crTextColor = COLOR_DEFAULT;
+    cf.dwMask = CFM_COLOR | CFM_BOLD | CFM_FACE | CFM_SIZE;
     cf.dwEffects = 0;
+    cf.crTextColor = COLOR_DEFAULT;
+    FillCodeFaceAndSize(cf);
     SendMessageW(hRichEdit, EM_SETCHARFORMAT, SCF_ALL, reinterpret_cast<LPARAM>(&cf));
 
     for (const auto& span : actualSpans) {

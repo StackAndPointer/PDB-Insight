@@ -12,7 +12,7 @@ public:
     static void ApplyFontSettings(const std::wstring& uiFontName,
                                   const std::wstring& codeFontName);
 
-    static std::vector<std::wstring> EnumerateSystemFonts();
+    static const std::vector<std::wstring>& GetSystemFonts();
 
     static HFONT GetHeaderViewFont();
     static HFONT GetCodeFont();

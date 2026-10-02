@@ -1,6 +1,7 @@
 #include "SettingsManager.h"
 #include "FontManager.h"
 #include "DPIManager.h"
+#include "ControlsManager.h"
 #include <cwctype>
 
 namespace {
@@ -122,7 +123,7 @@ void SettingsManager::InitControls() {
 }
 
 void SettingsManager::PopulateFontControls() {
-    const std::vector<std::wstring> fonts = FontManager::EnumerateSystemFonts();
+    const std::vector<std::wstring>& fonts = FontManager::GetSystemFonts();
 
     SendMessageW(m_comboUiFont, CB_RESETCONTENT, 0, 0);
     SendMessageW(m_comboUiFont, CB_ADDSTRING, 0,
@@ -190,6 +191,7 @@ bool SettingsManager::SaveSettings(HWND owner) {
     ConfigManager::GetInstance().SetCodeFontName(codeFont);
     ConfigManager::GetInstance().Save();
     FontManager::ApplyFontSettings(uiFont, codeFont);
+    ApplyApplicationFonts();
     return true;
 }
 

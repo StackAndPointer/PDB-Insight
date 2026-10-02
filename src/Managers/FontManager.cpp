@@ -46,24 +46,27 @@ HFONT CreateFontByName(const std::wstring& faceName, DWORD pitchAndFamily,
 }
 }  // namespace
 
-std::vector<std::wstring> FontManager::EnumerateSystemFonts() {
-    std::set<std::wstring> uniqueNames;
-    HDC hdc = GetDC(nullptr);
-    if (!hdc) return {};
+const std::vector<std::wstring>& FontManager::GetSystemFonts() {
+    static const std::vector<std::wstring> fonts = [] {
+        std::set<std::wstring> uniqueNames;
+        HDC hdc = GetDC(nullptr);
+        if (!hdc) return std::vector<std::wstring>{};
 
-    LOGFONTW filter = {};
-    filter.lfCharSet = DEFAULT_CHARSET;
-    EnumFontFamiliesExW(hdc, &filter,
-        [](const LOGFONTW* logFont, const TEXTMETRICW*, DWORD, LPARAM lParam) -> int {
-            auto* names = reinterpret_cast<std::set<std::wstring>*>(lParam);
-            if (logFont && logFont->lfFaceName[0] != L'@') {
-                names->insert(logFont->lfFaceName);
-            }
-            return 1;
-        }, reinterpret_cast<LPARAM>(&uniqueNames), 0);
-    ReleaseDC(nullptr, hdc);
+        LOGFONTW filter = {};
+        filter.lfCharSet = DEFAULT_CHARSET;
+        EnumFontFamiliesExW(hdc, &filter,
+            [](const LOGFONTW* logFont, const TEXTMETRICW*, DWORD, LPARAM lParam) -> int {
+                auto* names = reinterpret_cast<std::set<std::wstring>*>(lParam);
+                if (logFont && logFont->lfFaceName[0] != L'@') {
+                    names->insert(logFont->lfFaceName);
+                }
+                return 1;
+            }, reinterpret_cast<LPARAM>(&uniqueNames), 0);
+        ReleaseDC(nullptr, hdc);
 
-    return std::vector<std::wstring>(uniqueNames.begin(), uniqueNames.end());
+        return std::vector<std::wstring>(uniqueNames.begin(), uniqueNames.end());
+    }();
+    return fonts;
 }
 
 HFONT FontManager::CreateUiFont() {
@@ -161,6 +164,5 @@ int FontManager::ScaleForDPI(int value) {
 void FontManager::ApplyHeaderViewFont(HWND hRichEdit) {
     if (hRichEdit && s_codeFont) {
         SendMessageW(hRichEdit, WM_SETFONT, reinterpret_cast<WPARAM>(s_codeFont), TRUE);
-        InvalidateRect(hRichEdit, nullptr, TRUE);
     }
 }
