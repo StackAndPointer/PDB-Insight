@@ -5,7 +5,24 @@
 #include "TreeNodeHelper.h"
 #include "TreeViewManager.h"
 namespace {
-bool g_listViewVirtual = false;
+enum class ListViewContentMode {
+    Empty,
+    Functions,
+    Classes,
+    Structs,
+    Unions,
+    Enums,
+    GlobalVariables,
+    Details
+};
+
+struct ListViewRow {
+    std::wstring name;
+    std::wstring value;
+};
+
+ListViewContentMode g_listViewContentMode = ListViewContentMode::Empty;
+std::vector<ListViewRow> g_detailRows;
 
 void GetVirtualFunctionText(size_t index, size_t subItem, std::wstring& text) {
     if (index >= g_moduleInfo.functions.size()) return;
@@ -53,23 +70,45 @@ void GetVirtualGlobalText(size_t index, size_t subItem, std::wstring& text) {
         case 4: text = std::to_wstring(var.size); break;
     }
 }
+
+void GetDetailText(size_t index, size_t subItem, std::wstring& text) {
+    if (index >= g_detailRows.size()) return;
+    const auto& row = g_detailRows[index];
+    text = subItem == 0 ? row.name : row.value;
+}
 }
 
 void HandleListViewGetDispInfo(NMLVDISPINFOW* info) {
-    if (!info || !info->item.pszText || !g_listViewVirtual) return;
+    if (!info || !info->item.pszText) return;
     if (!(info->item.mask & LVIF_TEXT)) return;
 
     std::wstring text;
     const size_t index = static_cast<size_t>(info->item.iItem);
     const size_t subItem = static_cast<size_t>(info->item.iSubItem);
-    switch (g_virtualTreeState.category) {
-        case TreeCategory::Functions: GetVirtualFunctionText(index, subItem, text); break;
-        case TreeCategory::Classes: GetVirtualClassText(g_moduleInfo.classes, index, subItem, text); break;
-        case TreeCategory::Structs: GetVirtualClassText(g_moduleInfo.structs, index, subItem, text); break;
-        case TreeCategory::Unions: GetVirtualClassText(g_moduleInfo.unions, index, subItem, text); break;
-        case TreeCategory::Enums: GetVirtualEnumText(index, subItem, text); break;
-        case TreeCategory::GlobalVariables: GetVirtualGlobalText(index, subItem, text); break;
-        default: return;
+    switch (g_listViewContentMode) {
+        case ListViewContentMode::Functions:
+            GetVirtualFunctionText(index, subItem, text);
+            break;
+        case ListViewContentMode::Classes:
+            GetVirtualClassText(g_moduleInfo.classes, index, subItem, text);
+            break;
+        case ListViewContentMode::Structs:
+            GetVirtualClassText(g_moduleInfo.structs, index, subItem, text);
+            break;
+        case ListViewContentMode::Unions:
+            GetVirtualClassText(g_moduleInfo.unions, index, subItem, text);
+            break;
+        case ListViewContentMode::Enums:
+            GetVirtualEnumText(index, subItem, text);
+            break;
+        case ListViewContentMode::GlobalVariables:
+            GetVirtualGlobalText(index, subItem, text);
+            break;
+        case ListViewContentMode::Details:
+            GetDetailText(index, subItem, text);
+            break;
+        default:
+            return;
     }
 
     const size_t capacity = static_cast<size_t>(info->item.cchTextMax);
@@ -92,6 +131,9 @@ void PopulateListView(HTREEITEM hItem)
 
     ListView_DeleteAllItems(hListView);
     SendMessageW(hListView, WM_SETREDRAW, FALSE, 0);
+    g_listViewContentMode = ListViewContentMode::Empty;
+    g_detailRows.clear();
+    ListView_SetItemCountEx(hListView, 0, LVSICF_NOINVALIDATEALL | LVSICF_NOSCROLL);
 
     for (int i = Header_GetItemCount(ListView_GetHeader(hListView)) - 1; i >= 0; --i)
     {
@@ -109,10 +151,9 @@ void PopulateListView(HTREEITEM hItem)
     TreeView_GetItem(hTreeView, &tvi);
 
     DWORD param = (DWORD)tvi.lParam;
-    g_listViewVirtual = false;
-
     if (param == 1)
     {
+        g_listViewContentMode = ListViewContentMode::Functions;
         AddListViewColumn(0, LanguageManager::GetInstance().GetString(L"col_name", L"名称"), 200);
         AddListViewColumn(1, LanguageManager::GetInstance().GetString(L"col_return_type", L"返回类型"), 100);
         AddListViewColumn(2, LanguageManager::GetInstance().GetString(L"col_calling_convention", L"调用约定"), 100);
@@ -120,42 +161,22 @@ void PopulateListView(HTREEITEM hItem)
         AddListViewColumn(4, LanguageManager::GetInstance().GetString(L"col_size", L"大小"), 80);
         AddListViewColumn(5, LanguageManager::GetInstance().GetString(L"col_class_name", L"类名"), 150);
 
-        const bool useVirtual = g_virtualTreeState.category == TreeCategory::Functions &&
-            g_moduleInfo.functions.size() > 5000;
-        g_listViewVirtual = useVirtual;
         ListView_SetItemCountEx(hListView, static_cast<int>(g_moduleInfo.functions.size()),
             LVSICF_NOINVALIDATEALL | LVSICF_NOSCROLL);
-
-        for (size_t i = 0; !useVirtual && i < g_moduleInfo.functions.size(); ++i)
-        {
-            const auto& func = g_moduleInfo.functions[i];
-            LVITEM lvi;
-            lvi.mask = LVIF_TEXT;
-            lvi.iItem = (int)i;
-            lvi.iSubItem = 0;
-            lvi.pszText = (LPWSTR)(func.undecoratedName.empty() ? func.name : func.undecoratedName).c_str();
-            ListView_InsertItem(hListView, &lvi);
-
-            ListView_SetItemText(hListView, (int)i, 1, (LPWSTR)func.returnType.c_str());
-            ListView_SetItemText(hListView, (int)i, 2, (LPWSTR)PDBParser::CallingConventionToString(func.callingConvention).c_str());
-            
-            std::wstringstream ssRVA;
-            ssRVA << std::hex << std::showbase << func.rva;
-            ListView_SetItemText(hListView, (int)i, 3, (LPWSTR)ssRVA.str().c_str());
-            
-            std::wstringstream ssSize;
-            ssSize << func.size;
-            ListView_SetItemText(hListView, (int)i, 4, (LPWSTR)ssSize.str().c_str());
-            
-            ListView_SetItemText(hListView, (int)i, 5, (LPWSTR)func.className.c_str());
-        }
     }
     else if (param == 2 || param == 3 || param == 4)
     {
         const std::vector<ClassInfo>* pClasses = nullptr;
-        if (param == 2) pClasses = &g_moduleInfo.classes;
-        else if (param == 3) pClasses = &g_moduleInfo.structs;
-        else if (param == 4) pClasses = &g_moduleInfo.unions;
+        if (param == 2) {
+            pClasses = &g_moduleInfo.classes;
+            g_listViewContentMode = ListViewContentMode::Classes;
+        } else if (param == 3) {
+            pClasses = &g_moduleInfo.structs;
+            g_listViewContentMode = ListViewContentMode::Structs;
+        } else if (param == 4) {
+            pClasses = &g_moduleInfo.unions;
+            g_listViewContentMode = ListViewContentMode::Unions;
+        }
 
         if (pClasses)
         {
@@ -164,112 +185,38 @@ void PopulateListView(HTREEITEM hItem)
             AddListViewColumn(2, LanguageManager::GetInstance().GetString(L"col_member_count", L"成员数量"), 100);
             AddListViewColumn(3, LanguageManager::GetInstance().GetString(L"col_base_count", L"基类数量"), 100);
 
-            const bool useVirtual =
-                ((g_virtualTreeState.category == TreeCategory::Classes && param == 2) ||
-                 (g_virtualTreeState.category == TreeCategory::Structs && param == 3) ||
-                 (g_virtualTreeState.category == TreeCategory::Unions && param == 4)) &&
-                pClasses->size() > 5000;
-            g_listViewVirtual = useVirtual;
             ListView_SetItemCountEx(hListView, static_cast<int>(pClasses->size()),
                 LVSICF_NOINVALIDATEALL | LVSICF_NOSCROLL);
-
-            for (size_t i = 0; !useVirtual && i < pClasses->size(); ++i)
-            {
-                const auto& cls = (*pClasses)[i];
-                LVITEM lvi;
-                lvi.mask = LVIF_TEXT;
-                lvi.iItem = (int)i;
-                lvi.iSubItem = 0;
-                lvi.pszText = (LPWSTR)cls.name.c_str();
-                ListView_InsertItem(hListView, &lvi);
-
-                std::wstringstream ssSize;
-                ssSize << cls.size;
-                ListView_SetItemText(hListView, (int)i, 1, (LPWSTR)ssSize.str().c_str());
-                
-                std::wstringstream ssMembers;
-                ssMembers << cls.members.size();
-                ListView_SetItemText(hListView, (int)i, 2, (LPWSTR)ssMembers.str().c_str());
-                
-                std::wstringstream ssBases;
-                ssBases << cls.baseClasses.size();
-                ListView_SetItemText(hListView, (int)i, 3, (LPWSTR)ssBases.str().c_str());
-            }
         }
     }
     else if (param == 5)
     {
+        g_listViewContentMode = ListViewContentMode::Enums;
         AddListViewColumn(0, LanguageManager::GetInstance().GetString(L"col_name", L"名称"), 250);
         AddListViewColumn(1, LanguageManager::GetInstance().GetString(L"col_type", L"类型"), 150);
         AddListViewColumn(2, LanguageManager::GetInstance().GetString(L"col_member_count", L"值数量"), 100);
 
-        const bool useVirtual = g_virtualTreeState.category == TreeCategory::Enums &&
-            g_moduleInfo.enums.size() > 5000;
-        g_listViewVirtual = useVirtual;
         ListView_SetItemCountEx(hListView, static_cast<int>(g_moduleInfo.enums.size()),
             LVSICF_NOINVALIDATEALL | LVSICF_NOSCROLL);
-
-        for (size_t i = 0; !useVirtual && i < g_moduleInfo.enums.size(); ++i)
-        {
-            const auto& enm = g_moduleInfo.enums[i];
-            LVITEM lvi;
-            lvi.mask = LVIF_TEXT;
-            lvi.iItem = (int)i;
-            lvi.iSubItem = 0;
-            lvi.pszText = (LPWSTR)enm.name.c_str();
-            ListView_InsertItem(hListView, &lvi);
-
-            ListView_SetItemText(hListView, (int)i, 1, (LPWSTR)enm.underlyingType.c_str());
-            
-            std::wstringstream ssValues;
-            ssValues << enm.values.size();
-            ListView_SetItemText(hListView, (int)i, 2, (LPWSTR)ssValues.str().c_str());
-        }
     }
     else if (param == 6)
     {
+        g_listViewContentMode = ListViewContentMode::GlobalVariables;
         AddListViewColumn(0, LanguageManager::GetInstance().GetString(L"col_name", L"名称"), 250);
         AddListViewColumn(1, LanguageManager::GetInstance().GetString(L"col_type", L"类型"), 150);
         AddListViewColumn(2, LanguageManager::GetInstance().GetString(L"col_rva", L"RVA"), 100);
         AddListViewColumn(3, LanguageManager::GetInstance().GetString(L"col_virtual_address", L"虚拟地址"), 150);
         AddListViewColumn(4, LanguageManager::GetInstance().GetString(L"col_size", L"大小"), 80);
 
-        const bool useVirtual = g_virtualTreeState.category == TreeCategory::GlobalVariables &&
-            g_moduleInfo.globalVariables.size() > 5000;
-        g_listViewVirtual = useVirtual;
         ListView_SetItemCountEx(hListView, static_cast<int>(g_moduleInfo.globalVariables.size()),
             LVSICF_NOINVALIDATEALL | LVSICF_NOSCROLL);
-
-        for (size_t i = 0; !useVirtual && i < g_moduleInfo.globalVariables.size(); ++i)
-        {
-            const auto& var = g_moduleInfo.globalVariables[i];
-            LVITEM lvi;
-            lvi.mask = LVIF_TEXT;
-            lvi.iItem = (int)i;
-            lvi.iSubItem = 0;
-            lvi.pszText = (LPWSTR)var.name.c_str();
-            ListView_InsertItem(hListView, &lvi);
-
-            ListView_SetItemText(hListView, (int)i, 1, (LPWSTR)var.type.c_str());
-            
-            std::wstringstream ssRVA;
-            ssRVA << std::hex << std::showbase << var.rva;
-            ListView_SetItemText(hListView, (int)i, 2, (LPWSTR)ssRVA.str().c_str());
-            
-            std::wstringstream ssVA;
-            ssVA << std::hex << std::showbase << var.virtualAddress;
-            ListView_SetItemText(hListView, (int)i, 3, (LPWSTR)ssVA.str().c_str());
-            
-            std::wstringstream ssSize;
-            ssSize << var.size;
-            ListView_SetItemText(hListView, (int)i, 4, (LPWSTR)ssSize.str().c_str());
-        }
     }
     else if (TreeNodeParamHelper::IsFunctionNode(param))
     {
         size_t idx = TreeNodeParamHelper::GetIndex(param);
         if (idx < g_moduleInfo.functions.size())
         {
+            g_listViewContentMode = ListViewContentMode::Details;
             const auto& func = g_moduleInfo.functions[idx];
             auto displayInfo = FunctionInfoDisplayManager::GetDisplayInfo(func);
             
@@ -277,13 +224,7 @@ void PopulateListView(HTREEITEM hItem)
             AddListViewColumn(1, LanguageManager::GetInstance().GetString(L"col_value", L"值"), 400);
 
             auto addItem = [&](const std::wstring& name, const std::wstring& value) {
-                LVITEM lvi;
-                lvi.mask = LVIF_TEXT;
-                lvi.iItem = ListView_GetItemCount(hListView);
-                lvi.iSubItem = 0;
-                lvi.pszText = (LPWSTR)name.c_str();
-                ListView_InsertItem(hListView, &lvi);
-                ListView_SetItemText(hListView, lvi.iItem, 1, (LPWSTR)value.c_str());
+                g_detailRows.push_back({name, value});
             };
 
             addItem(LanguageManager::GetInstance().GetString(L"prop_name_decorated", L"名称 (修饰)"), func.name.empty() ? L"(未知)" : func.name);
@@ -346,17 +287,12 @@ void PopulateListView(HTREEITEM hItem)
 
         if (pClass)
         {
+            g_listViewContentMode = ListViewContentMode::Details;
             AddListViewColumn(0, LanguageManager::GetInstance().GetString(L"col_property", L"属性"), 150);
             AddListViewColumn(1, LanguageManager::GetInstance().GetString(L"col_value", L"值"), 450);
             
             auto addItem = [&](const std::wstring& name, const std::wstring& value) {
-                LVITEM lvi;
-                lvi.mask = LVIF_TEXT;
-                lvi.iItem = ListView_GetItemCount(hListView);
-                lvi.iSubItem = 0;
-                lvi.pszText = (LPWSTR)name.c_str();
-                ListView_InsertItem(hListView, &lvi);
-                ListView_SetItemText(hListView, lvi.iItem, 1, (LPWSTR)value.c_str());
+                g_detailRows.push_back({name, value});
             };
             
             addItem(LanguageManager::GetInstance().GetString(L"prop_name", L"名称"), pClass->name);
@@ -466,18 +402,13 @@ void PopulateListView(HTREEITEM hItem)
         size_t idx = TreeNodeParamHelper::GetIndex(param);
         if (idx < g_moduleInfo.enums.size())
         {
+            g_listViewContentMode = ListViewContentMode::Details;
             const auto& enm = g_moduleInfo.enums[idx];
             AddListViewColumn(0, LanguageManager::GetInstance().GetString(L"col_property", L"属性"), 150);
             AddListViewColumn(1, LanguageManager::GetInstance().GetString(L"col_value", L"值"), 450);
             
             auto addItem = [&](const std::wstring& name, const std::wstring& value) {
-                LVITEM lvi;
-                lvi.mask = LVIF_TEXT;
-                lvi.iItem = ListView_GetItemCount(hListView);
-                lvi.iSubItem = 0;
-                lvi.pszText = (LPWSTR)name.c_str();
-                ListView_InsertItem(hListView, &lvi);
-                ListView_SetItemText(hListView, lvi.iItem, 1, (LPWSTR)value.c_str());
+                g_detailRows.push_back({name, value});
             };
             
             addItem(LanguageManager::GetInstance().GetString(L"prop_name", L"名称"), enm.name);
@@ -501,18 +432,13 @@ void PopulateListView(HTREEITEM hItem)
         size_t idx = TreeNodeParamHelper::GetIndex(param);
         if (idx < g_moduleInfo.globalVariables.size())
         {
+            g_listViewContentMode = ListViewContentMode::Details;
             const auto& var = g_moduleInfo.globalVariables[idx];
             AddListViewColumn(0, LanguageManager::GetInstance().GetString(L"col_property", L"属性"), 150);
             AddListViewColumn(1, LanguageManager::GetInstance().GetString(L"col_value", L"值"), 450);
             
             auto addItem = [&](const std::wstring& name, const std::wstring& value) {
-                LVITEM lvi;
-                lvi.mask = LVIF_TEXT;
-                lvi.iItem = ListView_GetItemCount(hListView);
-                lvi.iSubItem = 0;
-                lvi.pszText = (LPWSTR)name.c_str();
-                ListView_InsertItem(hListView, &lvi);
-                ListView_SetItemText(hListView, lvi.iItem, 1, (LPWSTR)value.c_str());
+                g_detailRows.push_back({name, value});
             };
             
             addItem(LanguageManager::GetInstance().GetString(L"prop_name", L"名称"), var.name);
@@ -528,6 +454,10 @@ void PopulateListView(HTREEITEM hItem)
             
             addItem(LanguageManager::GetInstance().GetString(L"col_size", L"大小"), PDBHeaderGenerator::FormatNumber(var.size, g_numberMode));
         }
+    }
+    if (g_listViewContentMode == ListViewContentMode::Details) {
+        ListView_SetItemCountEx(hListView, static_cast<int>(g_detailRows.size()),
+            LVSICF_NOINVALIDATEALL | LVSICF_NOSCROLL);
     }
     ResizeListViewColumns();
     SendMessageW(hListView, WM_SETREDRAW, TRUE, 0);

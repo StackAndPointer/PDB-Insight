@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release version tag (for example 1.4)"
+        description: "Release version tag (for example 2.0)"
         required: true
-        default: "1.4"
+        default: "2.0"
       prerelease:
         description: "Mark this release as a pre-release"
         type: boolean
@@ -55,4 +55,12 @@ jobs:
           name: PDB Insight v${{ inputs.version }}
           prerelease: ${{ inputs.prerelease }}
           generate_release_notes: true
+          body: |
+            UI 优化，修复 UI 已知问题。
+
+            - 加入多线程 PDB 加载与解析，加载速度提升约 50%（具体增益因 PDB 和硬件而异）。
+            - 修复详情窗口、头文件视图、语法高亮和偏移量显示等问题。
+            - 支持自由选择系统字体。
+            - 修复匿名结构体、匿名联合体及复杂 C++ 类型展示问题。
+            - 优化大 PDB 列表的虚拟化加载和交互响应。
           files: PDB-Insight-${{ inputs.version }}-x64.zip
